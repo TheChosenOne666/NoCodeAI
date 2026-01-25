@@ -1,0 +1,13 @@
+# AI
+  langchain4j:
+    open-ai:
+      chat-model:
+        base-url: https://ark.cn-beijing.volces.com/api/v3
+        api-key: c4e109df-c44c-4451-86b0-020d0cd3a7c0
+        model-name: deepseek-r1-250528
+        log-requests: true
+        log-responses: true
+        max-tokens: 8192
+        strict-json-schema: true
+        response-format: json_object
+        max-retries: 5
