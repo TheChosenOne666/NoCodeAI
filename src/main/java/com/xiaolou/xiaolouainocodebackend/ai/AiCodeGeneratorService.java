@@ -3,11 +3,30 @@ package com.xiaolou.xiaolouainocodebackend.ai;
 import com.xiaolou.xiaolouainocodebackend.ai.model.HtmlCodeResult;
 import com.xiaolou.xiaolouainocodebackend.ai.model.MultiFileCodeResult;
 import dev.langchain4j.service.SystemMessage;
+import reactor.core.publisher.Flux;
 
 /**
  * AI代码生成服务接口
  */
 public interface AiCodeGeneratorService {
+
+    /**
+     * 生成 HTML 代码（流式）
+     *
+     * @param userMessage
+     * @return
+     */
+    @SystemMessage(fromResource = "prompt/code-gen-html-system-prompt.txt")
+    Flux<String> generateHtmlCodeStream(String userMessage);
+
+    /**
+     * 生成多文件代码（流式）
+     *
+     * @param userMessage
+     * @return
+     */
+    @SystemMessage(fromResource = "prompt/code-gen-multi-file-system-prompt.txt")
+    Flux<String> generateMultiFileCodeStream(String userMessage);
 
     /**
      * 生成 HTML 代码
