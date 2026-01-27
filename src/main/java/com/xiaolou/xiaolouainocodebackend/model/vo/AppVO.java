@@ -1,23 +1,16 @@
-package com.xiaolou.xiaolouainocodebackend.model.entity;
+package com.xiaolou.xiaolouainocodebackend.model.vo;
 
-import com.baomidou.mybatisplus.annotation.*;
+import lombok.Data;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
-import java.util.Date;
-import lombok.Data;
 
-/**
- * 应用
- * @TableName app
- */
-@TableName(value ="app")
 @Data
-public class App implements Serializable {
+public class AppVO implements Serializable {
+
     /**
      * id
      */
-    @TableId(type = IdType.ASSIGN_ID)
     private Long id;
 
     /**
@@ -48,7 +41,7 @@ public class App implements Serializable {
     /**
      * 部署时间
      */
-    private Date deployedTime;
+    private LocalDateTime deployedTime;
 
     /**
      * 优先级
@@ -61,11 +54,6 @@ public class App implements Serializable {
     private Long userId;
 
     /**
-     * 编辑时间
-     */
-    private LocalDateTime editTime;
-
-    /**
      * 创建时间
      */
     private LocalDateTime createTime;
@@ -76,11 +64,9 @@ public class App implements Serializable {
     private LocalDateTime updateTime;
 
     /**
-     * 是否删除
+     * 创建用户信息
      */
-    @TableLogic
-    private Integer isDelete;
+    private UserVO user;
 
-    @TableField(exist = false)
     private static final long serialVersionUID = 1L;
 }

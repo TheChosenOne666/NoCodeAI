@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.xiaolou.xiaolouainocodebackend.common.ErrorCode;
 import com.xiaolou.xiaolouainocodebackend.constant.CommonConstant;
 import com.xiaolou.xiaolouainocodebackend.exception.BusinessException;
+import com.xiaolou.xiaolouainocodebackend.mapper.UserMapper;
 import com.xiaolou.xiaolouainocodebackend.model.dto.user.UserQueryRequest;
 import com.xiaolou.xiaolouainocodebackend.model.entity.User;
 import com.xiaolou.xiaolouainocodebackend.model.enums.UserRoleEnum;
