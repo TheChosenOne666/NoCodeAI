@@ -2,14 +2,18 @@ package com.xiaolou.xiaolouainocodebackend.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
+import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.xiaolou.xiaolouainocodebackend.common.ErrorCode;
 import com.xiaolou.xiaolouainocodebackend.constant.CommonConstant;
+import com.xiaolou.xiaolouainocodebackend.core.AiCodeGeneratorFacade;
 import com.xiaolou.xiaolouainocodebackend.exception.BusinessException;
+import com.xiaolou.xiaolouainocodebackend.exception.ThrowUtils;
 import com.xiaolou.xiaolouainocodebackend.model.dto.app.AppQueryRequest;
 import com.xiaolou.xiaolouainocodebackend.model.entity.App;
 import com.xiaolou.xiaolouainocodebackend.model.entity.User;
+import com.xiaolou.xiaolouainocodebackend.model.enums.CodeGenTypeEnum;
 import com.xiaolou.xiaolouainocodebackend.model.vo.AppVO;
 import com.xiaolou.xiaolouainocodebackend.model.vo.UserVO;
 import com.xiaolou.xiaolouainocodebackend.service.AppService;
@@ -18,11 +22,9 @@ import com.xiaolou.xiaolouainocodebackend.service.UserService;
 import com.xiaolou.xiaolouainocodebackend.utils.SqlUtils;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -36,6 +38,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
 
     @Resource
     private UserService userService;
+
+    @Resource
+    private AiCodeGeneratorFacade aiCodeGeneratorFacade;
 
     @Override
     public AppVO getAppVO(App app) {
@@ -97,6 +102,28 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
             appVO.setUser(userVO);
             return appVO;
         }).collect(Collectors.toList());
+    }
+
+    @Override
+    public Flux<String> chatToGenCode(Long appId, String message, User loginUser) {
+        // 参数校验
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID不能为空");
+        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.PARAMS_ERROR, "应用不存在");
+        // 验证用户是否有权限访问该应用，仅本人可生成代码
+        if(!Objects.equals(app.getUserId(), loginUser.getId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN_ERROR, "无权限访问该应用");
+        }
+        // 获取应用的代码生成类型
+        String codeGenTypeStr = app.getCodeGenType();
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenTypeStr);
+        if (codeGenTypeEnum == null) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "不支持的应用代码生成类型");
+        }
+        // 调用 AI 生成代码
+        return aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
+
     }
 }
 
