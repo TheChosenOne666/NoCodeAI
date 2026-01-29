@@ -143,11 +143,13 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
             // 流式响应完成后，添加到对话历史
             String aiResponse = aiResponseBuild.toString();
             if (StrUtil.isNotBlank(aiResponse)){
+                chatHistoryService.addChatMessage(appId, message, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
                 chatHistoryService.addChatMessage(appId, aiResponse, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
             }
         }).doOnError(error -> {
             // 如果 AI 回复失败也要保存记录
             String errorMessage = "AI回复失败：" + error.getMessage();
+            chatHistoryService.addChatMessage(appId, message, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
             chatHistoryService.addChatMessage(appId, errorMessage, ChatHistoryMessageTypeEnum.AI.getValue(), loginUser.getId());
         });
 
