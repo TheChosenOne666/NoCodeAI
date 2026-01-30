@@ -2,7 +2,9 @@ package com.xiaolou.xiaolouainocodebackend.ai;
 
 import com.xiaolou.xiaolouainocodebackend.ai.model.HtmlCodeResult;
 import com.xiaolou.xiaolouainocodebackend.ai.model.MultiFileCodeResult;
+import dev.langchain4j.service.MemoryId;
 import dev.langchain4j.service.SystemMessage;
+import dev.langchain4j.service.UserMessage;
 import reactor.core.publisher.Flux;
 
 /**
@@ -17,7 +19,7 @@ public interface AiCodeGeneratorService {
      * @return
      */
     @SystemMessage(fromResource = "prompt/code-gen-html-system-prompt.txt")
-    Flux<String> generateHtmlCodeStream(String userMessage);
+    Flux<String> generateHtmlCodeStream(@UserMessage String userMessage);
 
     /**
      * 生成多文件代码（流式）
@@ -26,7 +28,7 @@ public interface AiCodeGeneratorService {
      * @return
      */
     @SystemMessage(fromResource = "prompt/code-gen-multi-file-system-prompt.txt")
-    Flux<String> generateMultiFileCodeStream(String userMessage);
+    Flux<String> generateMultiFileCodeStream(@UserMessage String userMessage);
 
     /**
      * 生成 HTML 代码
@@ -35,7 +37,7 @@ public interface AiCodeGeneratorService {
      * @return
      */
     @SystemMessage(fromResource = "prompt/code-gen-html-system-prompt.txt")
-    HtmlCodeResult generateHtmlCode(String userMessage);
+    HtmlCodeResult generateHtmlCode(@UserMessage String userMessage);
 
     /**
      * 生成多文件代码
@@ -44,5 +46,5 @@ public interface AiCodeGeneratorService {
      * @return
      */
     @SystemMessage(fromResource = "prompt/code-gen-multi-file-system-prompt.txt")
-    MultiFileCodeResult generateMultiFileCode(String userMessage);
+    MultiFileCodeResult generateMultiFileCode(@UserMessage String userMessage);
 }

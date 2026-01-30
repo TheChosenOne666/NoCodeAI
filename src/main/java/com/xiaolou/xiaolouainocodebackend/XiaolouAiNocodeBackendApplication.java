@@ -1,6 +1,7 @@
 package com.xiaolou.xiaolouainocodebackend;
 
 
+import dev.langchain4j.community.store.embedding.redis.spring.RedisEmbeddingStoreAutoConfiguration;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -13,8 +14,8 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
  * @author <a href="https://github.com/TheChosenOne666">小楼</a>
  * @from <a href="https://github.com/TheChosenOne666">TheChosenOne666</a>
  */
-// todo 如需开启 Redis，须移除 exclude 中的内容
-@SpringBootApplication
+
+@SpringBootApplication(exclude = {RedisEmbeddingStoreAutoConfiguration.class})
 @MapperScan("com.xiaolou.xiaolouainocodebackend.mapper")
 @EnableAspectJAutoProxy(proxyTargetClass = true, exposeProxy = true)
 public class XiaolouAiNocodeBackendApplication {

@@ -6,6 +6,7 @@ import com.xiaolou.xiaolouainocodebackend.model.dto.chathistory.ChatHistoryQuery
 import com.xiaolou.xiaolouainocodebackend.model.entity.ChatHistory;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.xiaolou.xiaolouainocodebackend.model.entity.User;
+import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 
 import java.time.LocalDateTime;
 
@@ -55,4 +56,14 @@ public interface ChatHistoryService extends IService<ChatHistory> {
     Page<ChatHistory> listAppChatHistoryByPage(Long appId, int pageSize,
                                                LocalDateTime lastCreateTime,
                                                User loginUser);
+
+    /**
+     * 将对话历史加载到内存中
+     *
+     * @param appId
+     * @param chatMemory
+     * @param maxCount
+     * @return
+     */
+    int loadChatHistoryToMemory(Long appId, MessageWindowChatMemory chatMemory, int maxCount);
 }

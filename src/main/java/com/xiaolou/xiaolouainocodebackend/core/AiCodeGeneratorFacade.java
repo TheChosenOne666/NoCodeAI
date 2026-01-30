@@ -1,6 +1,7 @@
 package com.xiaolou.xiaolouainocodebackend.core;
 
 import com.xiaolou.xiaolouainocodebackend.ai.AiCodeGeneratorService;
+import com.xiaolou.xiaolouainocodebackend.ai.AiCodeGeneratorServiceFactory;
 import com.xiaolou.xiaolouainocodebackend.ai.model.HtmlCodeResult;
 import com.xiaolou.xiaolouainocodebackend.ai.model.MultiFileCodeResult;
 import com.xiaolou.xiaolouainocodebackend.common.ErrorCode;
@@ -23,7 +24,7 @@ import java.io.File;
 public class AiCodeGeneratorFacade {
 
     @Resource
-    private AiCodeGeneratorService aiCodeGeneratorService;
+    private AiCodeGeneratorServiceFactory aiCodeGeneratorServiceFactory;
 
     /**
      * 统一入口：根据类型生成并保存代码
@@ -34,6 +35,8 @@ public class AiCodeGeneratorFacade {
      * @return 保存的目录
      */
     public File generateAndSaveCode(String userMessage, CodeGenTypeEnum codeGenTypeEnum, Long appId) {
+        // 根据appId获取对应的AI服务生成实例
+        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId);
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
@@ -61,6 +64,7 @@ public class AiCodeGeneratorFacade {
      * @param appId 应用id
      */
     public Flux<String> generateAndSaveCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum, Long appId) {
+        AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId);
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
         }
@@ -89,10 +93,8 @@ public class AiCodeGeneratorFacade {
      */
     private Flux<String> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, Long appId) {
         StringBuilder codeBuilder = new StringBuilder();
-        return codeStream.doOnNext(chunk -> {
-            // 实时收集代码片段
-            codeBuilder.append(chunk);
-        }).doOnComplete(() -> {
+        // 实时收集代码片段
+        return codeStream.doOnNext(codeBuilder::append).doOnComplete(() -> {
             // 流式返回完成后保存代码
             try {
                 String completeCode = codeBuilder.toString();

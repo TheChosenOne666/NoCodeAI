@@ -10,6 +10,12 @@ spring:
     url: jdbc:mysql://localhost:3306/nocode
     username: root
     password: 123456
+  # redis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      ttl: 3600
 server:
   port: 8123
   servlet:
@@ -34,6 +40,7 @@ mybatis-plus:
       logic-delete-field: isDelete # 全局逻辑删除的实体字段名
       logic-delete-value: 1 # 逻辑已删除值（默认为 1）
       logic-not-delete-value: 0 # 逻辑未删除值（默认为 0）
+
 # AI
 #langchain4j:
 #  open-ai:
