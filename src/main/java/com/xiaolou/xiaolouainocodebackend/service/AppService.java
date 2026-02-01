@@ -1,6 +1,7 @@
 package com.xiaolou.xiaolouainocodebackend.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.xiaolou.xiaolouainocodebackend.model.dto.app.AppAddRequest;
 import com.xiaolou.xiaolouainocodebackend.model.dto.app.AppQueryRequest;
 import com.xiaolou.xiaolouainocodebackend.model.entity.App;
 import com.baomidou.mybatisplus.extension.service.IService;
@@ -16,6 +17,15 @@ import java.util.List;
 * @createDate 2026-01-27 17:21:55
 */
 public interface AppService extends IService<App> {
+
+    /**
+     * 创建应用
+     *
+     * @param appAddRequest 应用创建请求
+     * @param loginUser     当前登录用户
+     * @return 应用ID
+     */
+    Long createApp(AppAddRequest appAddRequest, User loginUser);
 
     /**
      * 查询app关联信息服务
