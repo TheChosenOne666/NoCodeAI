@@ -126,16 +126,37 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         String sortField = appQueryRequest.getSortField();
         String sortOrder = appQueryRequest.getSortOrder();
         QueryWrapper<App> queryWrapper = new QueryWrapper<>();
-        return queryWrapper
-                .eq("id", id)
-                .like("appName", appName)
-                .like("cover", cover)
-                .like("initPrompt", initPrompt)
-                .eq("codeGenType", codeGenType)
-                .eq("deployKey", deployKey)
-                .eq("priority", priority)
-                .eq("userId", userId)
-                .orderBy(SqlUtils.validSortField(sortField), sortOrder.equals(CommonConstant.SORT_ORDER_ASC), sortField);
+
+        // 只在参数不为null时才添加查询条件
+        if (id != null) {
+            queryWrapper.eq("id", id);
+        }
+        if (StrUtil.isNotBlank(appName)) {
+            queryWrapper.like("appName", appName);
+        }
+        if (StrUtil.isNotBlank(cover)) {
+            queryWrapper.like("cover", cover);
+        }
+        if (StrUtil.isNotBlank(initPrompt)) {
+            queryWrapper.like("initPrompt", initPrompt);
+        }
+        if (StrUtil.isNotBlank(codeGenType)) {
+            queryWrapper.eq("codeGenType", codeGenType);
+        }
+        if (StrUtil.isNotBlank(deployKey)) {
+            queryWrapper.eq("deployKey", deployKey);
+        }
+        if (priority != null) {
+            queryWrapper.eq("priority", priority);
+        }
+        if (userId != null) {
+            queryWrapper.eq("userId", userId);
+        }
+        if (SqlUtils.validSortField(sortField)) {
+            queryWrapper.orderBy(true, sortOrder.equals(CommonConstant.SORT_ORDER_ASC), sortField);
+        }
+
+        return queryWrapper;
     }
     @Override
     public List<AppVO> getAppVOList(List<App> appList) {

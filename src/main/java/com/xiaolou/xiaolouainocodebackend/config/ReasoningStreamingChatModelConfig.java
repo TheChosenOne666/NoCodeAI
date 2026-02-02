@@ -15,13 +15,14 @@ public class ReasoningStreamingChatModelConfig {
 
     private String apiKey;
 
+    private String modelName;
+
     /**
      * 推理流式模型，用于vue项目生成，带工具调用
      * @return
      */
     @Bean
     public StreamingChatModel reasoningStreamingChatModel() {
-        final String modelName = "doubao-seed-1-8-251228";
         final int maxTokens = 32768;
         return OpenAiStreamingChatModel.builder()
                 .apiKey(apiKey)

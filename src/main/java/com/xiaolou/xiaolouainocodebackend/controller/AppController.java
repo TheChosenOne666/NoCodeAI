@@ -152,7 +152,7 @@ public class AppController {
         // 限制每页最多 20 个
         long pageSize = appQueryRequest.getPageSize();
         ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR, "每页最多查询 20 个应用");
-        long pageNum = appQueryRequest.getPageSize();
+        long pageNum = appQueryRequest.getCurrent();
         // 只查询当前用户的应用
         appQueryRequest.setUserId(loginUser.getId());
         QueryWrapper<App> queryWrapper = appService.getQueryWrapper(appQueryRequest);
@@ -175,7 +175,7 @@ public class AppController {
         // 限制每页最多 20 个
         long pageSize = appQueryRequest.getPageSize();
         ThrowUtils.throwIf(pageSize > 20, ErrorCode.PARAMS_ERROR, "每页最多查询 20 个应用");
-        long pageNum = appQueryRequest.getPageSize();
+        long pageNum = appQueryRequest.getCurrent();
         // 只查询精选的应用
         appQueryRequest.setPriority(AppConstant.GOOD_APP_PRIORITY);
         QueryWrapper<App> queryWrapper = appService.getQueryWrapper(appQueryRequest);
@@ -240,7 +240,7 @@ public class AppController {
     @AuthCheck(mustRole = UserConstant.ADMIN_ROLE)
     public BaseResponse<Page<AppVO>> listAppVOByPageByAdmin(@RequestBody AppQueryRequest appQueryRequest) {
         ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
-        long pageNum = appQueryRequest.getPageSize();
+        long pageNum = appQueryRequest.getCurrent();
         long pageSize = appQueryRequest.getPageSize();
         QueryWrapper<App> queryWrapper = appService.getQueryWrapper(appQueryRequest);
         Page<App> appPage = appService.page(Page.of(pageNum, pageSize), queryWrapper);
