@@ -310,16 +310,19 @@ const loadChatHistory = async (isLoadMore = false) => {
   loadingHistory.value = true
   try {
     const params: API.listAppChatHistoryParams = {
-      appId: appId.value,
+      appId: appId.value as any, // 保持为字符串类型，避免大数精度丢失
       pageSize: 10,
     }
+    console.log('加载对话历史参数:', params)
     // 如果是加载更多，传递最后一条消息的创建时间作为游标
     if (isLoadMore && lastCreateTime.value) {
       params.lastCreateTime = lastCreateTime.value
     }
     const res = await listAppChatHistory(params)
+    console.log('加载对话历史响应:', res)
     if (res.data.code === 0 && res.data.data) {
       const chatHistories = res.data.data.records || []
+      console.log('对话历史记录:', chatHistories)
       if (chatHistories.length > 0) {
         // 将对话历史转换为消息格式，并按时间正序排列（老消息在前）
         const historyMessages: Message[] = chatHistories
@@ -342,8 +345,15 @@ const loadChatHistory = async (isLoadMore = false) => {
         hasMoreHistory.value = chatHistories.length === 10
       } else {
         hasMoreHistory.value = false
+        console.log('没有找到对话历史记录')
       }
       historyLoaded.value = true
+      // 滚动到最新消息位置
+      nextTick(() => {
+        scrollToBottom()
+      })
+    } else {
+      console.log('加载对话历史失败，响应码:', res.data.code, '消息:', res.data.message)
     }
   } catch (error) {
     console.error('加载对话历史失败：', error)
@@ -373,23 +383,22 @@ const fetchAppInfo = async () => {
     const res = await getAppVoById({ id: id as unknown as number })
     if (res.data.code === 0 && res.data.data) {
       appInfo.value = res.data.data
+      console.log('应用信息:', appInfo.value)
 
       // 先加载对话历史
       await loadChatHistory()
-      // 如果有至少2条对话记录，展示对应的网站
-      if (messages.value.length >= 2) {
+      console.log('加载对话历史后，消息数量:', messages.value.length)
+      
+      // 如果有对话记录，直接展示对应的网站
+      if (messages.value.length > 0) {
         updatePreview()
+        console.log('已更新预览URL:', previewUrl.value)
+      } else if (appInfo.value.deployKey) {
+        // 如果没有对话历史但应用已部署过，也显示预览
+        updatePreview()
+        console.log('应用已部署，已更新预览URL:', previewUrl.value)
       }
-      // 检查是否需要自动发送初始提示词
-      // 只有在是自己的应用且没有对话历史时才自动发送
-      if (
-          appInfo.value.initPrompt &&
-          isOwner.value &&
-          messages.value.length === 0 &&
-          historyLoaded.value
-      ) {
-        await sendInitialMessage(appInfo.value.initPrompt)
-      }
+      // 不再自动发送初始提示词，用户可以手动输入开始对话
     } else {
       message.error('获取应用信息失败')
       router.push('/')

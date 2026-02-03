@@ -1,7 +1,7 @@
 <template>
   <div id="userLoginPage">
-    <h2 class="title">小楼 AI 应用生成 - 用户登录</h2>
-    <div class="desc">不写一行代码，生成完整应用</div>
+    <h2 class="title">No Code零代码应用搭建 - 用户登录</h2>
+    <div class="desc">零代码，实现天马行空的想法，搭建属于自己的应用，轻松部署分享</div>
     <a-form :model="formState" name="basic" autocomplete="off" @finish="handleSubmit">
       <a-form-item name="userAccount" :rules="[{ required: true, message: '请输入账号' }]">
         <a-input v-model:value="formState.userAccount" placeholder="请输入账号" />

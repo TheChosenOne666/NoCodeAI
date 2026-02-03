@@ -6,7 +6,7 @@
         <RouterLink to="/">
           <div class="header-left">
             <img class="logo" src="@/assets/logo.png" alt="Logo" />
-            <h1 class="site-title">小楼应用生成</h1>
+            <h1 class="site-title">No Code零代码</h1>
           </div>
         </RouterLink>
       </a-col>

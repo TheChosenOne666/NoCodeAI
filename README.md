@@ -1,4 +1,4 @@
-# 小楼 AI 代码生成器 - 前端
+# 小楼 NoCode-AI应用生成平台 - 前端
 
 这是一个基于 Vue 3 + TypeScript + Ant Design Vue 的 NoCode-AI应用生成平台项目的前端。用户可以通过与 AI 对话来创建网站应用、查看生成的网站应用效果、部署应用、管理个人应用等。
 

@@ -23,14 +23,15 @@ export async function listAppChatHistory(
   params: API.listAppChatHistoryParams,
   options?: { [key: string]: any }
 ) {
-  const { appId: param0, ...queryParams } = params
+  const { appId: param0, pageSize, lastCreateTime } = params
+  // 只传递非null的参数
+  const filteredParams: any = {}
+  if (pageSize !== undefined && pageSize !== null) filteredParams.pageSize = pageSize
+  if (lastCreateTime !== undefined && lastCreateTime !== null) filteredParams.lastCreateTime = lastCreateTime
+  
   return request<API.BaseResponsePageChatHistory>(`/chatHistory/app/${param0}`, {
     method: 'GET',
-    params: {
-      // pageSize has a default value: 10
-      pageSize: '10',
-      ...queryParams,
-    },
+    params: filteredParams,
     ...(options || {}),
   })
 }

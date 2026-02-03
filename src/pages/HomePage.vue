@@ -14,6 +14,18 @@ const loginUserStore = useLoginUserStore()
 const userPrompt = ref('')
 const creating = ref(false)
 
+// 打字机效果
+const typewriterText1 = ref('')
+const typewriterText2 = ref('')
+const fullText1 = ref('轻松创建网站应用，告别繁琐的配置和复杂的技术门槛')
+const fullText2 = ref('让你的创意瞬间转化为精美的网站，一键部署分享！')
+const currentIndex1 = ref(0)
+const currentIndex2 = ref(0)
+const typingSpeed = ref(100)
+let typingInterval1: any = null
+let typingInterval2: any = null
+const isLine1Complete = ref(false)
+
 // 我的应用数据
 const myApps = ref<API.AppVO[]>([])
 const myAppsPage = reactive({
@@ -131,10 +143,55 @@ const viewWork = (app: API.AppVO) => {
 
 // 格式化时间函数已移除，不再需要显示创建时间
 
+// 打字机效果函数
+const typeWriter1 = () => {
+  if (typingInterval1) clearInterval(typingInterval1)
+
+  typingInterval1 = setInterval(() => {
+    // 打字阶段
+    if (currentIndex1.value < fullText1.value.length) {
+      typewriterText1.value = fullText1.value.substring(0, currentIndex1.value + 1)
+      currentIndex1.value++
+    } else {
+      // 完成打字，启动第二行
+      clearInterval(typingInterval1)
+      isLine1Complete.value = true
+      typeWriter2()
+    }
+  }, typingSpeed.value)
+}
+
+const typeWriter2 = () => {
+  if (typingInterval2) clearInterval(typingInterval2)
+
+  typingInterval2 = setInterval(() => {
+    // 打字阶段
+    if (currentIndex2.value < fullText2.value.length) {
+      typewriterText2.value = fullText2.value.substring(0, currentIndex2.value + 1)
+      currentIndex2.value++
+    } else {
+      // 完成打字，等待一段时间后重新开始
+      clearInterval(typingInterval2)
+      setTimeout(() => {
+        // 重置所有状态并重新开始
+        currentIndex1.value = 0
+        currentIndex2.value = 0
+        typewriterText1.value = ''
+        typewriterText2.value = ''
+        isLine1Complete.value = false
+        typeWriter1()
+      }, 2000)
+    }
+  }, typingSpeed.value)
+}
+
 // 页面加载时获取数据
 onMounted(() => {
   loadMyApps()
   loadFeaturedApps()
+
+  // 启动打字机效果
+  typeWriter1()
 
   // 鼠标跟随光效
   const handleMouseMove = (e: MouseEvent) => {
@@ -149,9 +206,11 @@ onMounted(() => {
 
   document.addEventListener('mousemove', handleMouseMove)
 
-  // 清理事件监听器
+  // 清理事件监听器和定时器
   return () => {
     document.removeEventListener('mousemove', handleMouseMove)
+    if (typingInterval1) clearInterval(typingInterval1)
+    if (typingInterval2) clearInterval(typingInterval2)
   }
 })
 </script>
@@ -161,8 +220,12 @@ onMounted(() => {
     <div class="container">
       <!-- 网站标题和描述 -->
       <div class="hero-section">
-        <h1 class="hero-title">AI 应用生成平台</h1>
-        <p class="hero-description">一句话轻松创建网站应用</p>
+        <h1 class="hero-title">No Code-AI 零代码生成平台</h1>
+        <p class="hero-description">
+          <span class="gradient-text typewriter-text">{{ typewriterText1 }}</span>
+          <br>
+          <span class="gradient-text typewriter-text" :style="{ opacity: isLine1Complete ? 1 : 0 }">{{ typewriterText2 }}</span>
+        </p>
       </div>
 
       <!-- 用户提示词输入框 -->
@@ -433,13 +496,53 @@ onMounted(() => {
   }
 }
 
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
 .hero-description {
   font-size: 20px;
   margin: 0;
-  opacity: 0.8;
-  color: #64748b;
+  opacity: 0.9;
   position: relative;
   z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 48px; /* 固定高度，确保两行文字的空间 */
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 25%, #f093fb 50%, #f5576c 75%, #4facfe 100%);
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientShift 5s ease infinite;
+}
+
+.typewriter-text {
+  display: inline-block;
+  white-space: pre-wrap;
+  min-height: 1.2em;
+}
+
+.typewriter-text::after {
+  content: '|';
+  animation: blink 0.7s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
 }
 
 /* 输入区域 */
