@@ -89,16 +89,29 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         LocalDateTime lastCreateTime = chatHistoryQueryRequest.getLastCreateTime();
         String sortField = chatHistoryQueryRequest.getSortField();
         String sortOrder = chatHistoryQueryRequest.getSortOrder();
-        // 拼接查询条件
-        queryWrapper.eq("id", id)
-                .like("message", message)
-                .eq("messageType", messageType)
-                .eq("appId", appId)
-                .eq("userId", userId);
+
+        // 只在参数不为null时添加查询条件
+        if (id != null) {
+            queryWrapper.eq("id", id);
+        }
+        if (StrUtil.isNotBlank(message)) {
+            queryWrapper.like("message", message);
+        }
+        if (StrUtil.isNotBlank(messageType)) {
+            queryWrapper.eq("messageType", messageType);
+        }
+        if (appId != null) {
+            queryWrapper.eq("appId", appId);
+        }
+        if (userId != null) {
+            queryWrapper.eq("userId", userId);
+        }
+
         // 游标查询逻辑 - 只使用 createTime 作为游标
         if (lastCreateTime != null) {
             queryWrapper.lt("createTime", lastCreateTime);
         }
+
         // 排序
         if (StrUtil.isNotBlank(sortField)) {
             queryWrapper.orderBy(SqlUtils.validSortField(sortField),
@@ -110,6 +123,7 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         }
         return queryWrapper;
     }
+
 
     @Override
     public Page<ChatHistory> listAppChatHistoryByPage(Long appId, int pageSize,

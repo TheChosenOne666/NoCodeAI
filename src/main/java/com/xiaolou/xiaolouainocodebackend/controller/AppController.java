@@ -18,7 +18,6 @@ import com.xiaolou.xiaolouainocodebackend.exception.ThrowUtils;
 import com.xiaolou.xiaolouainocodebackend.model.dto.app.*;
 import com.xiaolou.xiaolouainocodebackend.model.entity.App;
 import com.xiaolou.xiaolouainocodebackend.model.entity.User;
-import com.xiaolou.xiaolouainocodebackend.model.enums.CodeGenTypeEnum;
 import com.xiaolou.xiaolouainocodebackend.model.vo.AppVO;
 import com.xiaolou.xiaolouainocodebackend.service.AppService;
 import com.xiaolou.xiaolouainocodebackend.service.ProjectDowmloadService;
