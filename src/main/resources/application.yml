@@ -78,3 +78,13 @@ mybatis-plus:
 #    secretKey: xxx
 #    region: xxx
 #    bucket: xxx
+#    host: xxx
+
+# Pexels 图片搜索配置
+#pexels:
+#  api-key: <Your API Key>
+
+# 火山引擎文生图模型配置
+#ai:
+#  api-key: <Your API Key>
+#image-model: <Your Image Model>
