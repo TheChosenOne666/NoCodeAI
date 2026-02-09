@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.io.File;
+import java.util.Map;
 
 /**
  * AI 代码生成门面类，组合生成和保存功能
@@ -129,23 +130,45 @@ public class AiCodeGeneratorFacade {
     private Flux<String> processTokenStream(TokenStream tokenStream) {
         return Flux.create(sink -> {
             tokenStream.onPartialResponse((String partialResponse) -> {
-                        AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse);
-                        sink.next(JSONUtil.toJsonStr(aiResponseMessage));
+                        try {
+                            AiResponseMessage aiResponseMessage = new AiResponseMessage(partialResponse);
+                            sink.next(JSONUtil.toJsonStr(aiResponseMessage));
+                        } catch (Exception e) {
+                            log.error("Error processing partial response: {}", e.getMessage(), e);
+                        }
                     })
                     .onPartialToolExecutionRequest((index, toolExecutionRequest) -> {
-                        ToolRequestMessage toolRequestMessage = new ToolRequestMessage(toolExecutionRequest);
-                        sink.next(JSONUtil.toJsonStr(toolRequestMessage));
+                        try {
+                            ToolRequestMessage toolRequestMessage = new ToolRequestMessage(toolExecutionRequest);
+                            sink.next(JSONUtil.toJsonStr(toolRequestMessage));
+                        } catch (Exception e) {
+                            log.error("Error processing tool execution request: {}", e.getMessage(), e);
+                        }
                     })
                     .onToolExecuted((ToolExecution toolExecution) -> {
-                        ToolExecutedMessage toolExecutedMessage = new ToolExecutedMessage(toolExecution);
-                        sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
+                        try {
+                            ToolExecutedMessage toolExecutedMessage = new ToolExecutedMessage(toolExecution);
+                            sink.next(JSONUtil.toJsonStr(toolExecutedMessage));
+                        } catch (Exception e) {
+                            log.error("Error processing tool execution: {}", e.getMessage(), e);
+                        }
                     })
                     .onCompleteResponse((ChatResponse response) -> {
                         sink.complete();
                     })
                     .onError((Throwable error) -> {
-                        error.printStackTrace();
-                        sink.error(error);
+                        log.error("Error in token stream: {}", error.getMessage(), error);
+                        // 发送错误信息到客户端
+                        try {
+                            Map<String, Object> errorData = Map.of(
+                                "error", true,
+                                "message", error.getMessage()
+                            );
+                            sink.next(JSONUtil.toJsonStr(errorData));
+                        } catch (Exception e) {
+                            log.error("Failed to send error to client: {}", e.getMessage());
+                        }
+                        sink.complete();
                     })
                     .start();
         });

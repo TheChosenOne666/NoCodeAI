@@ -101,9 +101,10 @@ public class AiCodeGeneratorServiceFactory {
                         .streamingChatModel(reasoningStreamingChatModel)
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .tools(toolManager.getAllTools())
-                        .hallucinatedToolNameStrategy(toolExecutionRequest -> ToolExecutionResultMessage.from(
-                                toolExecutionRequest, "Error: there is no tool called " + toolExecutionRequest.name()
-                        ))
+                        .hallucinatedToolNameStrategy(toolExecutionRequest -> {
+                            String errorMessage = "Error: Tool '" + toolExecutionRequest.name() + "' not found";
+                            return ToolExecutionResultMessage.from(toolExecutionRequest, errorMessage);
+                        })
                         .build();
             }
             // HTML 和多文件生成使用默认模型

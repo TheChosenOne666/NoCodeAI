@@ -118,19 +118,41 @@ class AiServiceStreamingResponseHandler implements StreamingChatResponseHandler 
 
         if (aiMessage.hasToolExecutionRequests()) {
             for (ToolExecutionRequest toolExecutionRequest : aiMessage.toolExecutionRequests()) {
-                String toolName = toolExecutionRequest.name();
-                ToolExecutor toolExecutor = toolExecutors.get(toolName);
-                String toolExecutionResult = toolExecutor.execute(toolExecutionRequest, memoryId);
-                ToolExecutionResultMessage toolExecutionResultMessage =
-                        ToolExecutionResultMessage.from(toolExecutionRequest, toolExecutionResult);
-                addToMemory(toolExecutionResultMessage);
+                try {
+                    String toolName = toolExecutionRequest.name();
+                    ToolExecutor toolExecutor = toolExecutors.get(toolName);
 
-                if (toolExecutionHandler != null) {
-                    ToolExecution toolExecution = ToolExecution.builder()
-                            .request(toolExecutionRequest)
-                            .result(toolExecutionResult)
-                            .build();
-                    toolExecutionHandler.accept(toolExecution);
+                    // 验证工具参数JSON格式
+                    String arguments = toolExecutionRequest.arguments();
+                    if (!isValidJson(arguments)) {
+                        LOG.error("Invalid tool arguments JSON for tool '{}': {}", toolName, arguments);
+                        // 使用空对象继续执行，避免整个流程失败
+                        toolExecutionRequest = ToolExecutionRequest.builder()
+                                .id(toolExecutionRequest.id())
+                                .name(toolName)
+                                .arguments("{}")
+                                .build();
+                    }
+
+                    String toolExecutionResult = toolExecutor.execute(toolExecutionRequest, memoryId);
+                    // 确保toolExecutionResult不为null或空
+                    String resultText = (toolExecutionResult != null && !toolExecutionResult.isEmpty()) 
+                            ? toolExecutionResult 
+                            : "Tool executed successfully";
+                    ToolExecutionResultMessage toolExecutionResultMessage =
+                            ToolExecutionResultMessage.from(toolExecutionRequest, resultText);
+                    addToMemory(toolExecutionResultMessage);
+
+                    if (toolExecutionHandler != null) {
+                        ToolExecution toolExecution = ToolExecution.builder()
+                                .request(toolExecutionRequest)
+                                .result(toolExecutionResult)
+                                .build();
+                        toolExecutionHandler.accept(toolExecution);
+                    }
+                } catch (Exception e) {
+                    LOG.error("Error executing tool: {}", e.getMessage(), e);
+                    // 继续执行其他工具调用，不中断整个流程
                 }
             }
 
@@ -213,6 +235,22 @@ class AiServiceStreamingResponseHandler implements StreamingChatResponseHandler 
 
     private List<ChatMessage> messagesToSend(Object memoryId) {
         return getMemory(memoryId).messages();
+    }
+
+    /**
+     * 验证JSON字符串是否有效
+     */
+    private boolean isValidJson(String json) {
+        if (json == null || json.isEmpty()) {
+            return false;
+        }
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            mapper.readTree(json);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override

@@ -38,7 +38,12 @@ public class FileReadTool extends BaseTool{
             if (!Files.exists(path) || !Files.isRegularFile(path)) {
                 return "错误：文件不存在或不是文件 - " + relativeFilePath;
             }
-            return Files.readString(path);
+            String content = Files.readString(path);
+            // 确保返回非空结果
+            if (StrUtil.isEmpty(content)) {
+                return "文件内容为空: " + relativeFilePath;
+            }
+            return content;
         } catch (IOException e) {
             String errorMessage = "读取文件失败: " + relativeFilePath + ", 错误: " + e.getMessage();
             log.error(errorMessage, e);

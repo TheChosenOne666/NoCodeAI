@@ -91,9 +91,38 @@ public class VueProjectBuilder {
             int exitCode = process.exitValue();
             if (exitCode == 0) {
                 log.info("命令执行成功: {}", command);
+                // 尝试读取标准输出
+                try {
+                    java.io.BufferedReader outputReader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(process.getInputStream()));
+                    StringBuilder output = new StringBuilder();
+                    String outputLine;
+                    while ((outputLine = outputReader.readLine()) != null) {
+                        output.append(outputLine).append(" ");
+                    }
+
+
+                } catch (Exception e) {
+                    log.debug("读取输出流失败: {}", e.getMessage());
+                }
                 return true;
             } else {
                 log.error("命令执行失败，退出码: {}", exitCode);
+                // 尝试读取错误流获取详细信息
+                try {
+                    java.io.BufferedReader errorReader = new java.io.BufferedReader(
+                            new java.io.InputStreamReader(process.getErrorStream()));
+                    StringBuilder errorOutput = new StringBuilder();
+                    String errorLine;
+                    while ((errorLine = errorReader.readLine()) != null) {
+                        errorOutput.append(errorLine).append("\n");
+                    }
+                    if (errorOutput.length() > 0) {
+                        log.error("命令错误输出:\n{}", errorOutput);
+                    }
+                } catch (Exception e) {
+                    log.error("读取错误流失败: {}", e.getMessage());
+                }
                 return false;
             }
         } catch (Exception e) {

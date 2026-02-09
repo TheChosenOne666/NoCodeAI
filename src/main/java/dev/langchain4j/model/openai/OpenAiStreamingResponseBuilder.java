@@ -10,6 +10,7 @@ import dev.langchain4j.model.openai.internal.completion.CompletionResponse;
 import dev.langchain4j.model.openai.internal.shared.Usage;
 import dev.langchain4j.model.output.FinishReason;
 import dev.langchain4j.model.output.TokenUsage;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Map;
@@ -29,6 +30,7 @@ import static java.util.stream.Collectors.toList;
  * in fact it almost certainly won't be.
  */
 @Internal
+@Slf4j
 public class OpenAiStreamingResponseBuilder {
 
     private final StringBuffer contentBuilder = new StringBuffer();
@@ -202,7 +204,7 @@ public class OpenAiStreamingResponseBuilder {
                     .map(it -> ToolExecutionRequest.builder()
                             .id(it.idBuilder.toString())
                             .name(it.nameBuilder.toString())
-                            .arguments(it.argumentsBuilder.toString())
+                            .arguments(it.getValidatedArguments())
                             .build())
                     .collect(toList());
 
@@ -232,5 +234,62 @@ public class OpenAiStreamingResponseBuilder {
         private final StringBuffer idBuilder = new StringBuffer();
         private final StringBuffer nameBuilder = new StringBuffer();
         private final StringBuffer argumentsBuilder = new StringBuffer();
+
+        /**
+         * 验证并修复JSON格式
+         * 处理流式传输中可能出现的JSON不完整问题
+         */
+        public String getValidatedArguments() {
+            String args = argumentsBuilder.toString();
+            if (args.isEmpty()) {
+                return "{}";
+            }
+
+            // 尝试修复常见的JSON格式问题
+            String fixedArgs = fixJson(args);
+
+            // 验证修复后的JSON是否有效
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                mapper.readTree(fixedArgs);
+                return fixedArgs;
+            } catch (Exception e) {
+                // 如果仍然无效，返回空对象
+                log.warn("Invalid tool arguments JSON, returning empty object. Original: {}, Fixed: {}", args, fixedArgs);
+                return "{}";
+            }
+        }
+
+        /**
+         * 修复常见的JSON格式问题
+         */
+        private String fixJson(String json) {
+            String fixed = json.trim();
+
+            // 移除末尾的不完整部分
+            int lastBrace = fixed.lastIndexOf('}');
+            if (lastBrace > 0) {
+                fixed = fixed.substring(0, lastBrace + 1);
+            }
+
+            // 检查并修复未闭合的引号
+            int quoteCount = 0;
+            for (char c : fixed.toCharArray()) {
+                if (c == '"') quoteCount++;
+            }
+            if (quoteCount % 2 != 0) {
+                fixed = fixed + "";
+            }
+
+            // 检查并修复未闭合的大括号
+            if (!fixed.startsWith("{")) {
+                fixed = "{" + fixed;
+            }
+            if (!fixed.endsWith("}")) {
+                fixed = fixed + "}";
+            }
+
+            return fixed;
+        }
     }
 }
