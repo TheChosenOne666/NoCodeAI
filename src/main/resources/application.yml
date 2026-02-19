@@ -86,6 +86,7 @@ langchain4j:
       base-url: https://ark.cn-beijing.volces.com/api/v3
       api-key: <Your API Key>
       model-name: lite-chat
+      max-tokens: 100
       log-requests: true
       log-responses: true
 
