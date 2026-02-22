@@ -19,6 +19,8 @@ import com.xiaolou.xiaolouainocodebackend.model.dto.app.*;
 import com.xiaolou.xiaolouainocodebackend.model.entity.App;
 import com.xiaolou.xiaolouainocodebackend.model.entity.User;
 import com.xiaolou.xiaolouainocodebackend.model.vo.AppVO;
+import com.xiaolou.xiaolouainocodebackend.ratelimit.annotation.RateLimit;
+import com.xiaolou.xiaolouainocodebackend.ratelimit.enums.RateLimitType;
 import com.xiaolou.xiaolouainocodebackend.service.AppService;
 import com.xiaolou.xiaolouainocodebackend.service.ProjectDowmloadService;
 import com.xiaolou.xiaolouainocodebackend.service.UserService;
@@ -281,6 +283,7 @@ public class AppController {
      * @return 生成结果流
      */
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @RateLimit(rate = 2, rateInterval = 60, limitType = RateLimitType.USER, message = "AI 对话请求过于频繁，请稍后再试")
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                       @RequestParam String message,
                                       HttpServletRequest request) {
