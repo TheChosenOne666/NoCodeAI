@@ -397,8 +397,14 @@ const fetchAppInfo = async () => {
         // 如果没有对话历史但应用已部署过，也显示预览
         updatePreview()
         console.log('应用已部署，已更新预览URL:', previewUrl.value)
+      } else {
+        // 检查是否有初始提示词（从路由参数获取）
+        const initialPrompt = route.query.initialPrompt as string
+        if (initialPrompt && isOwner.value) {
+          console.log('检测到初始提示词，自动发送:', initialPrompt)
+          await sendInitialMessage(initialPrompt)
+        }
       }
-      // 不再自动发送初始提示词，用户可以手动输入开始对话
     } else {
       message.error('获取应用信息失败')
       router.push('/')

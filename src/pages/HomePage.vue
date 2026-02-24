@@ -70,9 +70,12 @@ const createApp = async () => {
 
     if (res.data.code === 0 && res.data.data) {
       message.success('应用创建成功')
-      // 跳转到对话页面，确保ID是字符串类型
+      // 跳转到对话页面，确保ID是字符串类型，并传递初始提示词
       const appId = String(res.data.data)
-      await router.push(`/app/chat/${appId}`)
+      await router.push({
+        path: `/app/chat/${appId}`,
+        query: { initialPrompt: userPrompt.value.trim() }
+      })
     } else {
       message.error('创建失败：' + res.data.message)
     }
