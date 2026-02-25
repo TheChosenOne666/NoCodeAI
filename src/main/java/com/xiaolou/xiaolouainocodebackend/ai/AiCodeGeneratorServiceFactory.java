@@ -3,6 +3,7 @@ package com.xiaolou.xiaolouainocodebackend.ai;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.xiaolou.xiaolouainocodebackend.ai.guardrail.PromptSafetyInputGuardrail;
+import com.xiaolou.xiaolouainocodebackend.ai.guardrail.RetryOutputGuardrail;
 import com.xiaolou.xiaolouainocodebackend.ai.tools.*;
 import com.xiaolou.xiaolouainocodebackend.common.ErrorCode;
 import com.xiaolou.xiaolouainocodebackend.exception.BusinessException;
@@ -102,8 +103,11 @@ public class AiCodeGeneratorServiceFactory {
                         .streamingChatModel(reasoningStreamingChatModel)
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .tools(toolManager.getAllTools())
+                        // 限制单次对话，工具调用次数最大为20，防止AI无限循环调用
+                        .maxSequentialToolsInvocations(20)
                         // 添加输入护轨
                         .inputGuardrails(new PromptSafetyInputGuardrail())
+                        .outputGuardrails(new RetryOutputGuardrail())
                         .hallucinatedToolNameStrategy(toolExecutionRequest -> {
                             String errorMessage = "Error: Tool '" + toolExecutionRequest.name() + "' not found";
                             return ToolExecutionResultMessage.from(toolExecutionRequest, errorMessage);
@@ -119,6 +123,7 @@ public class AiCodeGeneratorServiceFactory {
                     .streamingChatModel(openAiStreamingChatModel)
                     .chatMemory(chatMemory)
                     .inputGuardrails(new PromptSafetyInputGuardrail())
+                    .outputGuardrails(new RetryOutputGuardrail())
                     .build();
             }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,
