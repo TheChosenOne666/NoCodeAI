@@ -3,7 +3,6 @@ package com.xiaolou.xiaolouainocodebackend.ai;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.xiaolou.xiaolouainocodebackend.ai.guardrail.PromptSafetyInputGuardrail;
-import com.xiaolou.xiaolouainocodebackend.ai.guardrail.RetryOutputGuardrail;
 import com.xiaolou.xiaolouainocodebackend.ai.tools.*;
 import com.xiaolou.xiaolouainocodebackend.common.ErrorCode;
 import com.xiaolou.xiaolouainocodebackend.exception.BusinessException;
@@ -24,7 +23,6 @@ import org.springframework.context.annotation.Configuration;
 import java.time.Duration;
 
 import static com.xiaolou.xiaolouainocodebackend.model.enums.CodeGenTypeEnum.HTML;
-import static com.xiaolou.xiaolouainocodebackend.model.enums.CodeGenTypeEnum.MULTI_FILE;
 
 /**
  * Ai 代码生成服务工厂
@@ -107,7 +105,6 @@ public class AiCodeGeneratorServiceFactory {
                         .maxSequentialToolsInvocations(20)
                         // 添加输入护轨
                         .inputGuardrails(new PromptSafetyInputGuardrail())
-                        .outputGuardrails(new RetryOutputGuardrail())
                         .hallucinatedToolNameStrategy(toolExecutionRequest -> {
                             String errorMessage = "Error: Tool '" + toolExecutionRequest.name() + "' not found";
                             return ToolExecutionResultMessage.from(toolExecutionRequest, errorMessage);
@@ -123,7 +120,6 @@ public class AiCodeGeneratorServiceFactory {
                     .streamingChatModel(openAiStreamingChatModel)
                     .chatMemory(chatMemory)
                     .inputGuardrails(new PromptSafetyInputGuardrail())
-                    .outputGuardrails(new RetryOutputGuardrail())
                     .build();
             }
             default -> throw new BusinessException(ErrorCode.SYSTEM_ERROR,
