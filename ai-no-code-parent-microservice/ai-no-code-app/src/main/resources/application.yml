@@ -1,0 +1,80 @@
+spring:
+  application:
+    name: ai-no-code-app
+  profiles:
+    active: local
+  # 数据库配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/nocode
+    username: root
+    password: 123456
+  # redis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      ttl: 3600
+      database: 0
+      password:
+  # session 配置
+  session:
+    store-type: redis
+    # session 30 天过期
+    timeout: 2592000
+server:
+  port: 8125
+  servlet:
+    context-path: /api
+    # cookie 30 天过期
+    session:
+      cookie:
+        max-age: 2592000
+# springdoc-openapi
+springdoc:
+  group-configs:
+    - group: 'default'
+      packages-to-scan: com.xiaolou.xiaolouainocodebackend.controller
+# knife4j
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+# AI
+  # todo 需替换配置
+langchain4j:
+  open-ai:
+    chat-model:
+      base-url: https://ark.cn-beijing.volces.com/api/v3
+      api-key: <Your API Key>
+      model-name: deepseek-chat
+      log-requests: true
+      log-responses: true
+      max-tokens: 8192
+      strict-json-schema: true
+      response-format: json_object
+    streaming-chat-model:
+      base-url: https://ark.cn-beijing.volces.com/api/v3
+      api-key: <Your API Key>
+      model-name: deepseek-chat
+      max-tokens: 8192
+      log-requests: true
+      log-responses: true
+
+    # AI 模型配置（多例）
+    # 推理 AI 模型配置（用于复杂的推理任务）
+    reasoning-streaming-chat-model:
+      base-url: https://ark.cn-beijing.volces.com/api/v3
+      api-key: <Your API Key>
+      model-name: deepseek-reasoner
+      temperature: 0.1
+      log-requests: true
+      log-responses: true
+    # 智能路由 AI 模型配置（用于简单的分类任务）
+    routing-chat-model:
+      base-url: https://ark.cn-beijing.volces.com/api/v3
+      api-key: <Your API Key>
+      model-name: lite-chat
+      max-tokens: 100
+      log-requests: true
+      log-responses: true
