@@ -20,7 +20,7 @@ cos:
 # Dubbo
 dubbo:
   registry:
-    address: nacos://127.0.0.1:8848?username=nacos&password=nacos
+    address: nacos://10.203.163.228:8848?username=nacos&password=nacos
     register-mode: instance
   protocol:
     name: tri
@@ -31,5 +31,5 @@ dubbo:
     timeout: 60000
   application:
     qos-enable: true
-    # 设置为-1，会自动随机找到一个可用端口，不然有可能启动服务一直会占用端口
-    qos-port: -1
+    # 设置为0，会自动随机找到一个可用端口，不然有可能启动服务一直会占用端口
+    qos-port: 0

@@ -176,7 +176,7 @@ public class AppController {
     @Cacheable(
             value = "good_app_page",
             key = "T(com.xiaolou.xiaolouainocodebackend.utils.CacheKeyUtils).generateKey(#appQueryRequest)",
-            condition = "#appQueryRequest.pageSize <= 10"
+            unless = "#appQueryRequest.pageSize <= 10"
     )
     public BaseResponse<Page<AppVO>> listGoodAppVOByPage(@RequestBody AppQueryRequest appQueryRequest) {
         ThrowUtils.throwIf(appQueryRequest == null, ErrorCode.PARAMS_ERROR);
