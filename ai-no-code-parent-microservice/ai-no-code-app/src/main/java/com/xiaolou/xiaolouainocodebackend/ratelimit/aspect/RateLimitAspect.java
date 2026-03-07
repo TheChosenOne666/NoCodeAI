@@ -2,9 +2,9 @@ package com.xiaolou.xiaolouainocodebackend.ratelimit.aspect;
 
 import com.xiaolou.xiaolouainocodebackend.common.ErrorCode;
 import com.xiaolou.xiaolouainocodebackend.exception.BusinessException;
+import com.xiaolou.xiaolouainocodebackend.innerservice.InnerUserService;
 import com.xiaolou.xiaolouainocodebackend.model.entity.User;
 import com.xiaolou.xiaolouainocodebackend.ratelimit.annotation.RateLimit;
-import com.xiaolou.xiaolouainocodebackend.service.UserService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +16,7 @@ import org.redisson.api.RRateLimiter;
 import org.redisson.api.RateIntervalUnit;
 import org.redisson.api.RateType;
 import org.redisson.api.RedissonClient;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -31,7 +32,8 @@ public class RateLimitAspect {
     private RedissonClient redissonClient;
 
     @Resource
-    private UserService userService;
+    @Lazy
+    private InnerUserService userService;
 
     @Before("@annotation(rateLimit)")
     public void doBefore(JoinPoint point, RateLimit rateLimit){
@@ -69,7 +71,7 @@ public class RateLimitAspect {
                     ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
                     if (attributes != null) {
                         HttpServletRequest request = attributes.getRequest();
-                        User loginUser = userService.getLoginUser(request);
+                        User loginUser = InnerUserService.getLoginUser(request);
                         keyBuilder.append("user:").append(loginUser.getId());
                     } else {
                         // 无法获取请求上下文，使用IP限流

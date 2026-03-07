@@ -14,7 +14,7 @@ import java.io.File;
 /**
  * COS对象存储管理器
  *
- * @author yupi
+ * @author xiaolou
  */
 @Component
 @ConditionalOnBean(COSClient.class)
