@@ -33,6 +33,7 @@ import com.xiaolou.xiaolouainocodebackend.service.ChatHistoryService;
 import com.xiaolou.xiaolouainocodebackend.utils.SqlUtils;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -53,8 +54,7 @@ import java.util.stream.Collectors;
 public class AppServiceImpl extends ServiceImpl<AppMapper, App>
     implements AppService{
 
-    @Resource
-    @Lazy
+    @DubboReference
     private InnerUserService userService;
 
     @Resource
@@ -69,8 +69,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
     @Resource
     private VueProjectBuilder vueProjectBuilder;
 
-    @Resource
-    @Lazy
+    @DubboReference
     private InnerScreenshotService screenshotService;
 
     @Resource

@@ -16,6 +16,7 @@ import com.xiaolou.xiaolouainocodebackend.service.ChatHistoryService;
 import jakarta.annotation.Resource;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.dubbo.config.annotation.DubboReference;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.web.bind.annotation.*;
 
@@ -26,8 +27,7 @@ import java.time.LocalDateTime;
 @Slf4j
 public class ChatHistoryController {
 
-    @Resource
-    @Lazy
+    @DubboReference
     private InnerUserService userService;
 
     @Resource

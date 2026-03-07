@@ -41,7 +41,6 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
     implements ChatHistoryService{
 
     @Resource
-    @Lazy
     private AppService appService;
 
     @Override
