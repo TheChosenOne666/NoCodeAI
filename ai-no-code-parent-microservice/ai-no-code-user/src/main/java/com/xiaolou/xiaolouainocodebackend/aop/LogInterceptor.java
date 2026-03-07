@@ -35,7 +35,7 @@ public class LogInterceptor {
         stopWatch.start();
         // 获取请求路径
         RequestAttributes requestAttributes = RequestContextHolder.currentRequestAttributes();
-        HttpServletRequest httpServletRequest = ((ServletRequestAttributes) requestAttributes).getRequest();
+        HttpServletRequest httpServletRequest = (HttpServletRequest) ((ServletRequestAttributes) requestAttributes).getRequest();
         // 生成请求唯一 id
         String requestId = UUID.randomUUID().toString();
         String url = httpServletRequest.getRequestURI();
