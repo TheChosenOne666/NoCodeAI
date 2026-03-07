@@ -15,13 +15,13 @@ import com.xiaolou.xiaolouainocodebackend.model.vo.LoginUserVO;
 import com.xiaolou.xiaolouainocodebackend.model.vo.UserVO;
 import com.xiaolou.xiaolouainocodebackend.service.UserService;
 import jakarta.annotation.Resource;
-import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.util.DigestUtils;
 import org.springframework.web.bind.annotation.*;
 
+import javax.servlet.http.HttpServletRequest;
 import java.util.List;
 
 import static com.xiaolou.xiaolouainocodebackend.service.impl.UserServiceImpl.SALT;
