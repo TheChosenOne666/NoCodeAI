@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: ai-no-code-screenshot
+  profiles:
+    active: local
+server:
+  port: 8127
+  servlet:
+    context-path: /api
+# 对象存储
+cos:
+  client:
+    accessKey: xxx
+    secretKey: xxx
+    region: xxx
+    bucket: xxx
+    host: xxx
