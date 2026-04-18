@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: ai-no-code-user
+  profiles:
+    active: local
+  # 数据库配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/nocode
+    username: root
+    password: 123456
+  # redis
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      ttl: 3600
+      database: 0
+      password:
+  # session 配置
+  session:
+    store-type: redis
+    # session 30 天过期
+    timeout: 2592000
+server:
+  port: 8124
+  servlet:
+    context-path: /api
+    # cookie 30 天过期
+    session:
+      cookie:
+        max-age: 2592000
+# springdoc-openapi
+springdoc:
+  group-configs:
+    - group: 'default'
+      packages-to-scan: com.xiaolou.xiaolouainocodebackend.controller
+# knife4j
+knife4j:
+  enable: true
+  setting:
+    language: zh_cn
+# Dubbo
+dubbo:
+  registry:
+    address: nacos://10.203.163.228:8848?username=nacos&password=nacos
+    register-mode: instance
+  protocol:
+    name: tri
+    port: 50051
+  consumer:
+    timeout: 60000
+  provider:
+    timeout: 60000
+  application:
+    qos-enable: true
+    # 设置为0，会自动随机找到一个可用端口，不然有可能启动服务一直会占用端口
+    qos-port: 0

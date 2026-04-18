@@ -1,0 +1,28 @@
+package com.xiaolou.xiaolouainocodebackend;
+
+
+import dev.langchain4j.community.store.embedding.redis.spring.RedisEmbeddingStoreAutoConfiguration;
+import org.mybatis.spring.annotation.MapperScan;
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
+
+/**
+ * 主类（项目启动入口）
+ *
+ * @author <a href="https://github.com/TheChosenOne666">小楼</a>
+ * @from <a href="https://github.com/TheChosenOne666">TheChosenOne666</a>
+ */
+
+@SpringBootApplication(exclude = {RedisEmbeddingStoreAutoConfiguration.class})
+@MapperScan("com.xiaolou.xiaolouainocodebackend.mapper")
+@EnableAspectJAutoProxy(proxyTargetClass = true, exposeProxy = true)
+@EnableCaching
+public class XiaolouAiNocodeBackendApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(XiaolouAiNocodeBackendApplication.class, args);
+    }
+
+}
