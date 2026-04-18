@@ -1,164 +1,248 @@
-# 小楼 NoCode-AI应用生成平台 - 前端
+<div align="center">
 
-这是一个基于 Vue 3 + TypeScript + Ant Design Vue 的 NoCode-AI应用生成平台项目的前端。用户可以通过与 AI 对话来创建网站应用、查看生成的网站应用效果、部署应用、管理个人应用等。
+# 🚀 XiaoLou AI NoCode
 
-## 功能特性
+**一句话生成网站应用，让 AI 替你写代码**
 
-### 用户功能
+基于 LangChain4j + Spring Boot 3 + Vue 3 的 AI 驱动零代码应用生成平台  
+用户输入自然语言描述，AI 自动生成可部署的网站应用
 
-- 🚀 **应用创建**：输入用户提示词来创建应用
-- 💬 **AI 对话**：通过和 AI 对话生成网站应用，并实时查看效果
-- 📝 **应用管理**：修改自己的应用信息（应用名称）
-- 🗑️ **应用删除**：删除自己的应用
-- 👀 **应用查看**：查看应用详情和生成效果
-- 🚀 **应用部署**：部署应用到云端
-- 📋 **应用列表**：分页查询自己的应用列表（支持根据名称查询）
-- ⭐ **精选应用**：分页查询精选的应用列表
+[![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/)
+[![Spring Boot 3.5](https://img.shields.io/badge/Spring_Boot-3.5.3-green.svg)](https://spring.io/projects/spring-boot)
+[![Vue 3](https://img.shields.io/badge/Vue-3.5-brightgreen.svg)](https://vuejs.org/)
+[![LangChain4j](https://img.shields.io/badge/LangChain4j-1.1.0-blue.svg)](https://docs.langchain4j.dev/)
+[![License](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
-### 管理员功能
+</div>
 
-- 🔧 **应用管理**：删除任意应用
-- ✏️ **应用编辑**：更新任意应用信息（应用名称、应用封面、优先级）
-- 📊 **应用查询**：分页查询应用列表（支持多字段查询）
-- 👁️ **应用查看**：查看任意应用详情
-- ⭐ **精选设置**：设置应用为精选（优先级99）
+---
 
-## 页面结构
+## ✨ 项目亮点
 
-### 1. 主页 (`/`)
+面试官你好 👋 这是一个从 0 到 1 独立完成的 **AI 应用生成平台**，不是调 API 的玩具项目。以下是技术亮点：
 
-- 网站标题和描述
-- 用户提示词输入框
-- 快捷操作按钮
-- 我的应用分页列表
-- 精选应用分页列表
+### 🤖 AI 核心 — 不只是 Chat，是真正的代码生成引擎
+- 基于 **LangChain4j** 构建 AI Agent，集成 **自定义工具链**（文件读写、目录操作、代码修改）
+- **智能路由**：AI 自动判断用户需求复杂度，路由到不同的代码生成策略
+  - 简单需求 → 单 HTML 文件（内联 CSS/JS）
+  - 中等需求 → 多文件分离（HTML + CSS + JS）
+  - 复杂需求 → 完整 Vue 项目工程
+- **流式输出（SSE）**：实时推送 AI 生成的代码，打字机般逐字呈现
+- **AI 护航**：LangChain4j Guardrail 实现输入安全审查，防止 Prompt 注入攻击
 
-### 2. 应用生成对话页 (`/app/chat/:id`)
+### 🏗️ 架构设计 — 单体到微服务的真实演进
+- **单体架构版本**（`src/`）：完整的单体应用，展现从 0 到 1 的开发过程
+- **微服务架构版本**（`ai-no-code-parent-microservice/`）：经过真实拆分的微服务架构
+  - 7 个独立服务模块：`common` / `model` / `client` / `user` / `app` / `ai` / `screenshot`
+  - **Dubbo + Nacos** 实现服务间 RPC 调用
+  - **Spring Cloud Alibaba** 技术栈
+- 两种架构并存，展示**架构演进思维**
 
-- 顶部栏：应用名称 + 部署按钮
-- 左侧对话区域：消息展示 + 用户输入框
-- 右侧网页展示区域：实时预览生成的网站
-- 部署成功弹窗
+### 🎯 工程能力
+- **设计模式实战**：门面模式（Facade）、策略模式（Strategy）、模板方法模式（Template Method）、执行器模式（Executor）
+- **分布式限流**：基于 Redisson 的自定义注解 `@RateLimit`，支持 IP / 用户 / 全局多维度限流
+- **并发优化**：`CompletableFuture` + 自定义线程池实现图片收集并发，Spring 多例模式解决 ChatModel 单例瓶颈
+- **AI 工作流**：LangGraph4j 实现条件边、循环边等高级工作流编排
+- **应用截图**：Selenium + ChromeDriver 自动化生成应用封面图
+- **一键部署**：生成代码自动打包为 zip 下载，支持在线预览部署
 
-### 3. 应用管理页 (`/admin/appManage`)
+### 🎨 前端工程
+- **Vue 3 + TypeScript + Vite 7**，Ant Design Vue 组件库
+- **可视化编辑器**：用户可在预览页面中点击元素，精准定位修改（类似 Figma 的点选交互）
+- **SSE 实时通信**：流式接收 AI 代码生成进度
+- **OpenAPI 自动生成**：`@umijs/openapi` 自动生成 TypeScript 接口类型，前后端契约一致
 
-- 仅管理员可见
-- 搜索表单：应用名称、创建者、生成类型
-- 应用列表表格：支持编辑、删除、精选操作
+---
 
-### 4. 应用信息修改页 (`/app/edit/:id`)
-
-- 用户和管理员都可进入
-- 普通用户只能编辑应用名称
-- 管理员可编辑应用名称、封面、优先级
-- 应用详细信息展示
-
-
-## 项目结构
+## 📁 项目结构
 
 ```
-src/
-├── api/                    # API 接口定义
-│   ├── appController.ts    # 应用相关接口
-│   ├── userController.ts   # 用户相关接口
-│   └── typings.d.ts        # 类型定义
-├── components/             # 公共组件
-│   ├── GlobalHeader.vue    # 全局头部
-│   └── GlobalFooter.vue    # 全局底部
-├── layouts/                # 布局组件
-│   └── BasicLayout.vue     # 基础布局
-├── pages/                  # 页面组件
-│   ├── HomePage.vue        # 首页
-│   ├── app/                # 应用相关页面
-│   │   ├── AppChatPage.vue # 应用对话页
-│   │   └── AppEditPage.vue # 应用编辑页
-│   ├── admin/              # 管理员页面
-│   │   ├── AppManagePage.vue # 应用管理页
-│   │   └── UserManagePage.vue # 用户管理页
-│   └── user/               # 用户页面
-│       ├── UserLoginPage.vue
-│       └── UserRegisterPage.vue
-├── stores/                 # 状态管理
-│   └── loginUser.ts        # 登录用户状态
-├── utils/                  # 工具函数
-│   ├── constants.ts        # 常量定义
-│   ├── format.ts          # 格式化工具
-│   └── validation.ts      # 验证工具
-├── router/                 # 路由配置
-│   └── index.ts
-└── main.ts                # 应用入口
+xiaolou-nocode/
+├── src/                                    # 📦 单体架构版本（完整可运行）
+│   ├── main/java/.../controller/           #   REST 控制器
+│   ├── main/java/.../ai/                   #   AI 服务核心（LangChain4j）
+│   │   ├── tools/                          #     AI Agent 工具链
+│   │   ├── guardrail/                      #     输入安全护轨
+│   │   ├── config/                         #     模型配置（多模型路由）
+│   │   └── model/                          #     AI 响应模型
+│   ├── main/java/.../core/                 #   核心业务层
+│   │   ├── builder/                        #     Vue 项目构建器
+│   │   ├── parser/                         #     代码解析器（策略模式）
+│   │   ├── saver/                          #     代码保存器（模板方法模式）
+│   │   └── handler/                        #     SSE 流处理器
+│   ├── main/java/.../ratelimit/            #   分布式限流（Redisson + AOP）
+│   ├── main/java/.../service/              #   业务逻辑层
+│   └── main/resources/prompt/              #   AI 系统提示词
+│
+├── ai-no-code-parent-microservice/         # 🏗️ 微服务架构版本
+│   ├── ai-no-code-ai/                      #   AI 生成服务（独立部署）
+│   ├── ai-no-code-app/                     #   应用服务（API 网关入口）
+│   ├── ai-no-code-user/                    #   用户服务
+│   ├── ai-no-code-screenshot/              #   截图服务（Selenium）
+│   ├── ai-no-code-common/                  #   公共模块
+│   ├── ai-no-code-model/                   #   数据模型
+│   └── ai-no-code-client/                  #   服务间 RPC 接口
+│
+├── xiaolou-nocode-frontend/                # 🎨 前端项目
+│   ├── src/pages/                          #   页面组件
+│   │   ├── HomePage.vue                    #     首页（打字机效果 + 精选应用）
+│   │   ├── app/AppChatPage.vue             #     AI 对话 + 代码预览
+│   │   └── admin/                          #     管理后台
+│   ├── src/components/                     #   通用组件
+│   ├── src/utils/visualEditor.ts           #   可视化编辑器工具
+│   └── src/api/                            #   OpenAPI 自动生成的接口
+│
+└── sql/create_table.sql                    #   数据库初始化脚本
 ```
 
-## 开发环境设置
+---
 
-### 推荐 IDE 设置
+## 🔧 技术栈
 
-[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (需要禁用 Vetur)
+| 层级 | 技术 |
+|------|------|
+| **AI 框架** | LangChain4j 1.1、LangGraph4j、火山引擎（豆包大模型） |
+| **后端框架** | Spring Boot 3.5、Spring Cloud Alibaba 2023、Dubbo 3.3 |
+| **注册中心** | Nacos |
+| **数据库** | MySQL、MyBatis-Plus |
+| **缓存/限流** | Redis、Redisson、Caffeine |
+| **会话管理** | Spring Session + Redis（分布式 Session） |
+| **安全** | LangChain4j Guardrail（Prompt 注入防护）、分布式限流 |
+| **前端** | Vue 3.5、TypeScript 5.8、Vite 7、Ant Design Vue 4、Pinia |
+| **工具** | Selenium（截图）、腾讯云 COS（对象存储）、Knife4j（API 文档） |
 
-### 项目设置
+---
 
-```sh
+## 🚀 快速开始
+
+### 环境要求
+
+- Java 21+
+- Node.js 18+
+- MySQL 8.0+
+- Redis 7.0+
+- Nacos 2.x
+
+### 1. 数据库初始化
+
+```sql
+source sql/create_table.sql
+```
+
+### 2. 启动后端（单体版本）
+
+```bash
+# 修改 src/main/resources/application.yml 中的数据库、Redis、AI 模型配置
+mvn spring-boot:run
+```
+
+### 3. 启动后端（微服务版本）
+
+```bash
+# 依次启动各服务
+cd ai-no-code-parent-microservice
+mvn clean install -DskipTests
+```
+
+> 启动顺序：Nacos → User Service → App Service → AI Service → Screenshot Service
+
+### 4. 启动前端
+
+```bash
+cd xiaolou-nocode-frontend
 npm install
-```
-
-### 开发环境运行
-
-```sh
 npm run dev
 ```
 
-### 类型检查、编译和压缩
+---
 
-```sh
-npm run build
+## 🧠 核心流程
+
+```
+用户输入描述 "帮我做一个个人博客网站"
+        │
+        ▼
+┌──────────────────┐
+│  智能路由服务      │  ← AI 判断需求复杂度
+│  (Routing AI)     │     → HTML / MULTI_FILE / VUE_PROJECT
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│  AI 代码生成      │  ← LangChain4j Agent + 工具链
+│  (CodeGen AI)    │     流式 SSE 逐 token 输出
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│  代码解析与保存    │  ← 策略模式选择解析器
+│  (Parser+Saver)  │     模板方法模式保存文件
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐
+│  预览 / 部署      │  ← 在线预览、截图、一键下载 zip
+└──────────────────┘
 ```
 
-### 代码检查
+---
 
-```sh
-npm run lint
-```
+## 📸 功能演示
 
-## 业务流程
+### 🏠 首页
+- 打字机动效 Hero 区域
+- 精选应用展示（带封面图）
+- 我的应用管理
 
-### 1. 创建应用流程
+### 💬 AI 对话生成
+- 自然语言对话，AI 流式生成代码
+- 实时代码预览（iframe 沙箱）
+- **可视化编辑**：点击预览页面元素，精准定位修改
 
-1. 用户在主页输入提示词
-2. 调用创建应用接口得到应用 ID
-3. 跳转到对话页面
-4. 自动发送初始提示词给 AI
-5. 通过 SSE 实时显示 AI 回复
-6. 生成完成后在右侧展示网站效果
+### 📦 应用管理
+- 应用详情查看 / 编辑
+- 下载代码压缩包
+- 一键部署上线
+- 管理后台（用户管理、应用审核）
 
-### 2. 部署应用流程
+---
 
-1. 在对话页面点击部署按钮
-2. 调用后端部署接口
-3. 获取可访问的 URL 地址
-4. 显示部署成功弹窗
+## 📝 设计思路与踩坑记录
 
-### 3. 管理应用流程
+<details>
+<summary><b>🔧 点击展开技术细节</b></summary>
 
-1. 管理员进入应用管理页
-2. 查看应用列表，支持搜索过滤
-3. 可以编辑、删除、设置精选
-4. 编辑跳转到应用编辑页面
+### 1. 为什么有两种架构版本？
+项目最初是单体开发，快速验证想法。当业务增长后，进行了真实的微服务拆分。两种版本保留在仓库中，可以清晰看到演进过程。
 
-## 注意事项
+### 2. AI 流式输出的挑战
+LangChain4j 的 `TokenStream` 默认不支持 Reactor `Flux`，我通过**定制 StreamingChatModel 源码**，实现了 Flux 响应式流，解决了 SSE 推送和前端实时渲染的问题。
 
-- 应用生成需要后端 AI 服务支持
-- 部署功能需要配置部署服务
-- 管理员功能需要相应的权限控制
-- 预览功能依赖后端静态资源服务
+### 3. 并发调用优化
+Spring 默认 Bean 是单例，而 ChatModel 内部维护对话状态，多用户并发时会串话。通过配置 `@Scope("prototype")` 让每个请求获得独立的 ChatModel 实例。
 
-## 贡献指南
+### 4. 代码生成类型路由
+不是简单的 if-else，而是用**独立的 AI 模型**分析用户需求，自动路由到最适合的代码生成策略（单页面 / 多文件 / Vue 工程），这是真正的智能分发。
 
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 打开 Pull Request
+### 5. 安全防护
+- **输入层**：LangChain4j Guardrail 拦截 Prompt 注入
+- **流量层**：Redisson 分布式限流，防止滥用
+- **输出层**：重试机制 + 异常处理，保证 SSE 连接稳定性
 
-## 许可证
+</details>
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
+---
+
+## 📄 License
+
+[Apache-2.0](LICENSE)
+
+---
+
+<div align="center">
+
+**⭐ 如果这个项目对你有帮助，欢迎 Star！**
+
+Made with ❤️ by [小楼](https://gitee.com/xiaolou-vv)
+
+</div>
