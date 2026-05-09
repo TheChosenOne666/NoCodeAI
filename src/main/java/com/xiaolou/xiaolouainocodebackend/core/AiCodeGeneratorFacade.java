@@ -168,11 +168,12 @@ public class AiCodeGeneratorFacade {
                         log.error("Error in token stream: {}", error.getMessage(), error);
                         // 发送错误信息到客户端
                         try {
-                            Map<String, Object> errorData = Map.of(
-                                "error", true,
-                                "message", error.getMessage()
-                            );
-                            sink.next(JSONUtil.toJsonStr(errorData));
+                            String errorMessage = "AI服务暂时不可用,请稍后重试";
+                            if (error.getMessage() != null && error.getMessage().contains("rate_limit")) {
+                                errorMessage = "AI服务繁忙,请稍后重试";
+                            }
+                            AiResponseMessage aiResponseMessage = new AiResponseMessage("\n\n" + errorMessage);
+                            sink.next(JSONUtil.toJsonStr(aiResponseMessage));
                         } catch (Exception e) {
                             log.error("Failed to send error to client: {}", e.getMessage());
                         }
