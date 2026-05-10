@@ -61,6 +61,11 @@ public class GlobalExceptionHandler {
         String uri = request.getRequestURI();
         if ((accept != null && accept.contains("text/event-stream")) || 
             uri.contains("/chat/gen/code")) {
+            // 如果响应已经提交（比如流已经开始发送数据），不能再写入
+            if (response.isCommitted()) {
+                log.warn("SSE response already committed, cannot write error: {}", errorMessage);
+                return true;
+            }
             try {
                 // 设置SSE响应头
                 response.setContentType("text/event-stream");
