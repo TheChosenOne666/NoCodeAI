@@ -172,13 +172,17 @@
           </div>
         </div>
         <div class="preview-content">
-          <div v-if="!previewUrl && !isGenerating" class="preview-placeholder">
+          <div v-if="!previewUrl && !isGenerating && !isBuilding" class="preview-placeholder">
             <div class="placeholder-icon">🌐</div>
             <p>网站文件生成完成后将在这里展示</p>
           </div>
           <div v-else-if="isGenerating" class="preview-loading">
             <a-spin size="large" />
             <p>正在生成网站...</p>
+          </div>
+          <div v-else-if="isBuilding" class="preview-loading">
+            <a-spin size="large" />
+            <p>正在构建项目，请稍候...</p>
           </div>
           <iframe
               v-else
@@ -218,6 +222,8 @@ import {
   getAppVoById,
   deployApp as deployAppApi,
   deleteApp as deleteAppApi,
+  getBuildStatus,
+  triggerBuild,
 } from '@/api/appController'
 import { listAppChatHistory } from '@/api/chatHistoryController'
 import { CodeGenTypeEnum, formatCodeGenType } from '@/utils/codeGenTypes'
@@ -269,6 +275,8 @@ const historyLoaded = ref(false)
 // 预览相关
 const previewUrl = ref('')
 const previewReady = ref(false)
+const isBuilding = ref(false)
+const buildPollingTimer = ref<ReturnType<typeof setInterval> | null>(null)
 
 // 部署相关
 const deploying = ref(false)
@@ -548,7 +556,7 @@ const generateCode = async (userMessage: string, aiMessageIndex: number) => {
       setTimeout(async () => {
         await fetchAppInfo()
         updatePreview()
-      }, 1000)
+      }, 2000) // Vue 项目构建是异步的，给后端一点时间启动构建
     })
 
     // 处理business-error事件（后端限流等错误）
@@ -586,7 +594,7 @@ const generateCode = async (userMessage: string, aiMessageIndex: number) => {
         setTimeout(async () => {
           await fetchAppInfo()
           updatePreview()
-        }, 1000)
+        }, 2000)
       } else {
         handleError(new Error('SSE连接错误'), aiMessageIndex)
       }
@@ -607,12 +615,84 @@ const handleError = (error: unknown, aiMessageIndex: number) => {
 }
 
 // 更新预览
-const updatePreview = () => {
+const updatePreview = async () => {
   if (appId.value) {
     const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
     const newPreviewUrl = getStaticPreviewUrl(codeGenType, appId.value)
     previewUrl.value = newPreviewUrl
     previewReady.value = true
+    // Vue 项目需要检查构建状态
+    if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {
+      await checkBuildStatusAndPoll()
+    }
+  }
+}
+
+// 检查 Vue 项目构建状态并轮询
+const checkBuildStatusAndPoll = async () => {
+  if (!appId.value) return
+  try {
+    const res = await getBuildStatus({ appId: appId.value as unknown as number })
+    if (res.data.code === 0 && res.data.data) {
+      const status = res.data.data as string
+      if (status === 'building') {
+        isBuilding.value = true
+        startBuildPolling()
+      } else if (status === 'success') {
+        isBuilding.value = false
+        stopBuildPolling()
+      } else if (status === 'failed') {
+        isBuilding.value = false
+        stopBuildPolling()
+        message.warning('项目构建失败，请尝试重新发送消息')
+      } else if (status === 'not_built') {
+        // 尚未构建，触发构建
+        isBuilding.value = true
+        try {
+          await triggerBuild({ appId: appId.value as unknown as number })
+        } catch (e) {
+          console.error('触发构建失败:', e)
+        }
+        startBuildPolling()
+      }
+    }
+  } catch (error) {
+    console.error('检查构建状态失败:', error)
+  }
+}
+
+// 开始轮询构建状态
+const startBuildPolling = () => {
+  stopBuildPolling()
+  isBuilding.value = true
+  buildPollingTimer.value = setInterval(async () => {
+    try {
+      const res = await getBuildStatus({ appId: appId.value as unknown as number })
+      if (res.data.code === 0 && res.data.data) {
+        const status = res.data.data as string
+        if (status === 'success') {
+          isBuilding.value = false
+          stopBuildPolling()
+          // 刷新预览
+          const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
+          previewUrl.value = getStaticPreviewUrl(codeGenType, appId.value) + '?t=' + Date.now()
+        } else if (status === 'failed') {
+          isBuilding.value = false
+          stopBuildPolling()
+          message.warning('项目构建失败，请尝试重新发送消息')
+        }
+      }
+    } catch (error) {
+      console.error('轮询构建状态失败:', error)
+    }
+  }, 3000) // 每3秒轮询一次
+}
+
+// 停止轮询构建状态
+const stopBuildPolling = () => {
+  if (buildPollingTimer.value) {
+    clearInterval(buildPollingTimer.value)
+    buildPollingTimer.value = null
   }
 }
 
@@ -780,7 +860,7 @@ onMounted(() => {
 
 // 清理资源
 onUnmounted(() => {
-  // EventSource 会在组件卸载时自动清理
+  stopBuildPolling()
 })
 </script>
 

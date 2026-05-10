@@ -169,6 +169,34 @@ export async function listMyAppVoByPage(
   })
 }
 
+/** 查询 Vue 项目构建状态 GET /app/build/status */
+export async function getBuildStatus(
+  params: API.getBuildStatusParams,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseString>('/app/build/status', {
+    method: 'GET',
+    params: {
+      ...params,
+    },
+    ...(options || {}),
+  })
+}
+
+/** 手动触发 Vue 项目构建 POST /app/build/trigger */
+export async function triggerBuild(
+  params: API.triggerBuildParams,
+  options?: { [key: string]: any }
+) {
+  return request<API.BaseResponseString>('/app/build/trigger', {
+    method: 'POST',
+    params: {
+      ...params,
+    },
+    ...(options || {}),
+  })
+}
+
 /** 此处后端没有提供注释 POST /app/update */
 export async function updateApp(body: API.AppUpdateRequest, options?: { [key: string]: any }) {
   return request<API.BaseResponseBoolean>('/app/update', {

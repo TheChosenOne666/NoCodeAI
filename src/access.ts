@@ -13,8 +13,13 @@ router.beforeEach(async (to, from, next) => {
   let loginUser = loginUserStore.loginUser
   // 确保页面刷新，首次加载时，能够等后端返回用户信息后再校验权限
   if (firstFetchLoginUser) {
-    await loginUserStore.fetchLoginUser()
-    loginUser = loginUserStore.loginUser
+    try {
+      await loginUserStore.fetchLoginUser()
+      loginUser = loginUserStore.loginUser
+    } catch (error) {
+      // 获取用户信息失败（如后端未启动、网络错误），不阻塞页面渲染
+      console.warn('获取登录用户信息失败:', error)
+    }
     firstFetchLoginUser = false
   }
   const toUrl = to.fullPath
