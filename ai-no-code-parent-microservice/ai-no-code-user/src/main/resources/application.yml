@@ -40,10 +40,19 @@ knife4j:
   enable: true
   setting:
     language: zh_cn
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: false
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+  global-config:
+    db-config:
+      logic-delete-field: isDelete # 全局逻辑删除的实体字段名
+      logic-delete-value: 1 # 逻辑已删除值（默认为 1）
+      logic-not-delete-value: 0 # 逻辑未删除值（默认为 0）
 # Dubbo
 dubbo:
   registry:
-    address: nacos://10.203.163.228:8848?username=nacos&password=nacos
+    address: nacos://127.0.0.1:8848
     register-mode: instance
   protocol:
     name: tri

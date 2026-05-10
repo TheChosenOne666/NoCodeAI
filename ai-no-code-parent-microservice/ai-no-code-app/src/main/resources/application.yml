@@ -23,7 +23,7 @@ spring:
     # session 30 天过期
     timeout: 2592000
 server:
-  port: 8125
+  port: 8123
   servlet:
     context-path: /api
     # cookie 30 天过期
@@ -90,7 +90,7 @@ langchain4j:
 # Dubbo
 dubbo:
   registry:
-    address: nacos://10.203.163.228:8848?username=nacos&password=nacos
+    address: nacos://127.0.0.1:8848
     register-mode: instance
   protocol:
     name: tri
