@@ -154,6 +154,14 @@ declare namespace API {
     id: number
   }
 
+  type getBuildStatusParams = {
+    appId: number
+  }
+
+  type triggerBuildParams = {
+    appId: number
+  }
+
   type getUserByIdParams = {
     id: number
   }

@@ -7,7 +7,9 @@ import {CodeGenTypeEnum} from "@/utils/codeGenTypes.ts";
 export const DEPLOY_DOMAIN = import.meta.env.VITE_DEPLOY_DOMAIN || 'http://localhost'
 
 // API 基础地址
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8123/api'
+// 开发环境使用相对路径 /api，让 Vite 代理转发到后端
+// 生产环境通过环境变量配置完整地址
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 // 静态资源地址
 export const STATIC_BASE_URL = `${API_BASE_URL}/static`
