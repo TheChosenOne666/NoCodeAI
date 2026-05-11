@@ -1,164 +1,136 @@
-# 小楼 NoCode-AI应用生成平台 - 前端
+# XiaoLou AI NoCode - AI 驱动的零代码应用生成平台
 
-这是一个基于 Vue 3 + TypeScript + Ant Design Vue 的 NoCode-AI应用生成平台项目的前端。用户可以通过与 AI 对话来创建网站应用、查看生成的网站应用效果、部署应用、管理个人应用等。
+这是一个用自然语言生成网站应用的平台。用户描述想要什么，AI 直接生成可预览、可下载、可部署的代码。
 
-## 功能特性
+## 项目简介
 
-### 用户功能
+核心功能很简单：用户输入一句话，比如"帮我做一个个人博客网站"，系统会自动生成完整的页面代码，支持在线预览和一键下载。
 
-- 🚀 **应用创建**：输入用户提示词来创建应用
-- 💬 **AI 对话**：通过和 AI 对话生成网站应用，并实时查看效果
-- 📝 **应用管理**：修改自己的应用信息（应用名称）
-- 🗑️ **应用删除**：删除自己的应用
-- 👀 **应用查看**：查看应用详情和生成效果
-- 🚀 **应用部署**：部署应用到云端
-- 📋 **应用列表**：分页查询自己的应用列表（支持根据名称查询）
-- ⭐ **精选应用**：分页查询精选的应用列表
+技术上做了几件有意思的事：
 
-### 管理员功能
+1. **AI 不只是聊天** — 基于 LangChain4j 构建了 Agent，挂载了文件读写、目录浏览、代码修改等工具，AI 能真正操作文件系统来生成项目
+2. **智能路由** — 用一个独立的 AI 模型分析用户需求复杂度，自动决定生成策略：简单需求出单 HTML，中等需求出多文件，复杂需求出完整 Vue 工程
+3. **流式输出** — AI 生成的代码通过 SSE 逐 token 推送到前端，用户能实时看到代码在"生长"
+4. **可视化编辑** — 用户在预览页面上点击元素，系统能精准定位到对应代码位置，支持针对性修改
+5. **安全防护** — LangChain4j Guardrail 拦截 Prompt 注入，Redisson 分布式限流防滥用
 
-- 🔧 **应用管理**：删除任意应用
-- ✏️ **应用编辑**：更新任意应用信息（应用名称、应用封面、优先级）
-- 📊 **应用查询**：分页查询应用列表（支持多字段查询）
-- 👁️ **应用查看**：查看任意应用详情
-- ⭐ **精选设置**：设置应用为精选（优先级99）
+## 技术栈
 
-## 页面结构
+**后端**
+- Spring Boot 3.5 / Java 21
+- LangChain4j 1.1（AI Agent 框架）、LangGraph4j（工作流编排）
+- Spring Cloud Alibaba 2023 + Dubbo 3.3（微服务版本）
+- Nacos（注册中心）、Redis / Redisson（缓存 + 分布式限流）
+- MyBatis-Plus、Spring Session（分布式会话）
+- Selenium（自动化截图生成封面图）
 
-### 1. 主页 (`/`)
-
-- 网站标题和描述
-- 用户提示词输入框
-- 快捷操作按钮
-- 我的应用分页列表
-- 精选应用分页列表
-
-### 2. 应用生成对话页 (`/app/chat/:id`)
-
-- 顶部栏：应用名称 + 部署按钮
-- 左侧对话区域：消息展示 + 用户输入框
-- 右侧网页展示区域：实时预览生成的网站
-- 部署成功弹窗
-
-### 3. 应用管理页 (`/admin/appManage`)
-
-- 仅管理员可见
-- 搜索表单：应用名称、创建者、生成类型
-- 应用列表表格：支持编辑、删除、精选操作
-
-### 4. 应用信息修改页 (`/app/edit/:id`)
-
-- 用户和管理员都可进入
-- 普通用户只能编辑应用名称
-- 管理员可编辑应用名称、封面、优先级
-- 应用详细信息展示
-
+**前端**
+- Vue 3.5 + TypeScript 5.8 + Vite 7
+- Ant Design Vue 4、Pinia
+- SSE 实时通信、iframe 沙箱预览
 
 ## 项目结构
 
+仓库里有两套架构版本，可以清楚看到从单体到微服务的演进过程：
+
 ```
-src/
-├── api/                    # API 接口定义
-│   ├── appController.ts    # 应用相关接口
-│   ├── userController.ts   # 用户相关接口
-│   └── typings.d.ts        # 类型定义
-├── components/             # 公共组件
-│   ├── GlobalHeader.vue    # 全局头部
-│   └── GlobalFooter.vue    # 全局底部
-├── layouts/                # 布局组件
-│   └── BasicLayout.vue     # 基础布局
-├── pages/                  # 页面组件
-│   ├── HomePage.vue        # 首页
-│   ├── app/                # 应用相关页面
-│   │   ├── AppChatPage.vue # 应用对话页
-│   │   └── AppEditPage.vue # 应用编辑页
-│   ├── admin/              # 管理员页面
-│   │   ├── AppManagePage.vue # 应用管理页
-│   │   └── UserManagePage.vue # 用户管理页
-│   └── user/               # 用户页面
-│       ├── UserLoginPage.vue
-│       └── UserRegisterPage.vue
-├── stores/                 # 状态管理
-│   └── loginUser.ts        # 登录用户状态
-├── utils/                  # 工具函数
-│   ├── constants.ts        # 常量定义
-│   ├── format.ts          # 格式化工具
-│   └── validation.ts      # 验证工具
-├── router/                 # 路由配置
-│   └── index.ts
-└── main.ts                # 应用入口
+xiaolou-nocode/
+├── src/                                    # 单体架构（完整可运行）
+│   ├── main/java/.../ai/                   #   AI 服务核心
+│   │   ├── tools/                          #     Agent 工具链（文件读写、目录操作）
+│   │   ├── guardrail/                      #     输入安全审查
+│   │   └── config/                         #     多模型配置与路由
+│   ├── main/java/.../core/                 #   代码生成核心
+│   │   ├── parser/                         #     代码解析器（策略模式）
+│   │   ├── saver/                          #     代码保存器（模板方法模式）
+│   │   └── handler/                        #     SSE 流处理器
+│   ├── main/java/.../ratelimit/            #   分布式限流（自定义注解 + AOP）
+│   └── main/resources/prompt/              #   AI 系统提示词
+│
+├── ai-no-code-parent-microservice/         # 微服务架构版本
+│   ├── ai-no-code-ai/                      #   AI 生成服务
+│   ├── ai-no-code-app/                     #   应用服务（API 入口）
+│   ├── ai-no-code-user/                    #   用户服务
+│   ├── ai-no-code-screenshot/              #   截图服务
+│   ├── ai-no-code-common/                  #   公共模块
+│   ├── ai-no-code-model/                   #   数据模型
+│   └── ai-no-code-client/                  #   RPC 接口定义
+│
+├── xiaolou-nocode-frontend/                # 前端
+│   ├── src/pages/HomePage.vue              #   首页
+│   ├── src/pages/app/AppChatPage.vue       #   AI 对话 + 代码预览
+│   └── src/utils/visualEditor.ts           #   可视化编辑器
+│
+└── sql/create_table.sql                    #   数据库脚本
 ```
 
-## 开发环境设置
+## 核心流程
 
-### 推荐 IDE 设置
+```
+用户输入 "帮我做一个个人博客"
+        │
+        ▼
+  智能路由（AI 分析需求复杂度）
+   → HTML / 多文件 / Vue 项目
+        │
+        ▼
+  AI Agent 生成代码（LangChain4j + 工具链）
+   → SSE 流式逐 token 输出
+        │
+        ▼
+  代码解析 → 保存到文件系统
+   → 策略模式选择解析器
+   → 模板方法模式保存
+        │
+        ▼
+  在线预览 / 下载 zip / 部署
+```
 
-[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (需要禁用 Vetur)
+## 快速开始
 
-### 项目设置
+### 环境
 
-```sh
+Java 21、Node.js 18+、MySQL 8.0、Redis 7.0、Nacos 2.x
+
+### 启动
+
+```bash
+# 1. 初始化数据库
+source sql/create_table.sql
+
+# 2. 修改 src/main/resources/application.yml 配置（数据库、Redis、AI 模型）
+
+# 3. 启动后端
+mvn spring-boot:run
+
+# 4. 启动前端
+cd xiaolou-nocode-frontend
 npm install
-```
-
-### 开发环境运行
-
-```sh
 npm run dev
 ```
 
-### 类型检查、编译和压缩
+## 一些技术细节
 
-```sh
-npm run build
-```
+**为什么有两套架构**
 
-### 代码检查
+项目先以单体快速开发验证，业务增长后拆分为微服务。两套版本都保留在仓库中，拆分逻辑清晰可见——ai、user、app、screenshot 各自独立部署，通过 Dubbo RPC 通信。
 
-```sh
-npm run lint
-```
+**流式输出的实现**
 
-## 业务流程
+LangChain4j 的 TokenStream 默认不支持 Reactor Flux，我改写了 StreamingChatModel 的源码层，让 AI 输出能直接对接 Spring WebFlux 的 SSE，前端通过 EventSource 实时接收。
 
-### 1. 创建应用流程
+**并发问题**
 
-1. 用户在主页输入提示词
-2. 调用创建应用接口得到应用 ID
-3. 跳转到对话页面
-4. 自动发送初始提示词给 AI
-5. 通过 SSE 实时显示 AI 回复
-6. 生成完成后在右侧展示网站效果
+ChatModel 内部维护对话状态，Spring 默认单例 Bean 在多用户并发下会串话。通过 `@Scope("prototype")` 让每个请求获得独立实例，配合 CompletableFuture 实现图片收集等 IO 密集任务的并发执行。
 
-### 2. 部署应用流程
+**限流设计**
 
-1. 在对话页面点击部署按钮
-2. 调用后端部署接口
-3. 获取可访问的 URL 地址
-4. 显示部署成功弹窗
+自定义了 `@RateLimit` 注解，支持 IP、用户、全局三种维度，基于 Redisson 的 RRateLimiter 实现分布式限流，用 AOP 切面无侵入式接入。
 
-### 3. 管理应用流程
+**代码生成路由**
 
-1. 管理员进入应用管理页
-2. 查看应用列表，支持搜索过滤
-3. 可以编辑、删除、设置精选
-4. 编辑跳转到应用编辑页面
+不是 if-else 硬编码，而是用单独的 AI 模型分析用户描述的复杂度，自动路由到合适的生成策略。简单展示页出单 HTML，多页交互出多文件，复杂应用出完整 Vue 工程。
 
-## 注意事项
+---
 
-- 应用生成需要后端 AI 服务支持
-- 部署功能需要配置部署服务
-- 管理员功能需要相应的权限控制
-- 预览功能依赖后端静态资源服务
-
-## 贡献指南
-
-1. Fork 本仓库
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 打开 Pull Request
-
-## 许可证
-
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
+License: Apache-2.0
