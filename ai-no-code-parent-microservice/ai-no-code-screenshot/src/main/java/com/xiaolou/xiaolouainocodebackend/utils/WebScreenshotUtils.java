@@ -6,6 +6,7 @@ import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.xiaolou.xiaolouainocodebackend.common.ErrorCode;
 import com.xiaolou.xiaolouainocodebackend.exception.BusinessException;
+import io.github.bonigarcia.wdm.WebDriverManager;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
 import org.openqa.selenium.JavascriptExecutor;
@@ -30,8 +31,8 @@ public class WebScreenshotUtils {
     private static volatile WebDriver webDriver = null;
 
     // 使用相对路径指向 resources 目录下的 ChromeDriver
-    private static final String CHROME_DRIVER_PATH =
-            System.getProperty("user.dir") + "/src/main/resources/web_drivers/chromedriver.exe";
+//    private static final String CHROME_DRIVER_PATH =
+//            System.getProperty("user.dir") + "/src/main/resources/web_drivers/chromedriver.exe";
     private static final int DEFAULT_WIDTH = 1600;
     private static final int DEFAULT_HEIGHT = 900;
 
@@ -121,23 +122,16 @@ public class WebScreenshotUtils {
      */
     private static WebDriver getWebDriver() {
         try {
-            // 检查 ChromeDriver 文件是否存在
-            File driverFile = new File(CHROME_DRIVER_PATH);
-            if (!driverFile.exists()) {
-                throw new BusinessException(ErrorCode.SYSTEM_ERROR,
-                        "ChromeDriver 未找到，请确保文件存在于: " + CHROME_DRIVER_PATH);
-            }
-
-            // 设置本地 ChromeDriver 路径
-            System.setProperty("webdriver.chrome.driver", CHROME_DRIVER_PATH);
+            // 使用 WebDriverManager 自动管理 ChromeDriver 版本
+            WebDriverManager.chromedriver().setup();
 
             // 配置 Chrome 选项
             ChromeOptions options = new ChromeOptions();
             // 无头模式
             options.addArguments("--headless");
-            // 禁用GPU（在某些环境下避免问题）
+            // 禁用GPU(在某些环境下避免问题)
             options.addArguments("--disable-gpu");
-            // 禁用沙盒模式（Docker环境需要）
+            // 禁用沙盒模式(Docker环境需要)
             options.addArguments("--no-sandbox");
             // 禁用开发者shm使用
             options.addArguments("--disable-dev-shm-usage");
@@ -147,15 +141,12 @@ public class WebScreenshotUtils {
             options.addArguments("--disable-extensions");
             // 设置用户代理
             options.addArguments("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36");
-
             // 创建驱动
             WebDriver driver = new ChromeDriver(options);
-
             // 设置页面加载超时
             driver.manage().timeouts().pageLoadTimeout(Duration.ofSeconds(30));
             // 设置隐式等待
             driver.manage().timeouts().implicitlyWait(Duration.ofSeconds(10));
-
             return driver;
         } catch (Exception e) {
             log.error("初始化 Chrome 浏览器失败", e);
