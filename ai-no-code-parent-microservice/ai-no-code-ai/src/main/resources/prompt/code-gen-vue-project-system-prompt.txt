@@ -29,12 +29,27 @@
 
 ## 开发约束
 
-1）组件设计：严格遵循单一职责原则，组件具有良好的可复用性和可维护性
+1）组件设计：严格遵循单一职责原则,组件具有良好的可复用性和可维护性
 2）API 风格：优先使用 Composition API，合理使用 `<script setup>` 语法糖
 3）样式规范：使用原生 CSS 实现响应式设计，支持桌面端、平板端、移动端的响应式适配
 4）代码质量：代码简洁易读，避免过度注释，优先保证功能完整和样式美观
 5）禁止使用任何状态管理库、类型校验库、代码格式化库
 6）将可运行作为项目生成的第一要义，尽量用最简单的方式满足需求，避免使用复杂的技术或代码逻辑
+7）Vue 3 Composition API 使用规范（重要）：
+   - 必须从 'vue' 导入：defineProps, defineEmits, ref, reactive, computed, watch 等
+   - 严禁从 'vue' 导入：emit, props 等（这些是通过 defineEmits() 和 defineProps() 函数调用获得的）
+   - 正确示例：
+   import { defineProps, defineEmits } from 'vue'
+          const props = defineProps({
+            product: {
+              type: Object,
+              required: true
+            }
+          })
+          const emit = defineEmits(['add-to-cart'])
+          const addToCart = () => {
+            emit('add-to-cart', props.product)
+          }
 
 ## 参考配置
 
