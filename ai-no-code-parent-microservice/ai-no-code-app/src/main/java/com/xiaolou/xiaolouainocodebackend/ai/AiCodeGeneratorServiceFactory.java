@@ -3,6 +3,8 @@ package com.xiaolou.xiaolouainocodebackend.ai;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.xiaolou.xiaolouainocodebackend.ai.guardrail.PromptSafetyInputGuardrail;
+import com.xiaolou.xiaolouainocodebackend.ai.tools.ImageSearchTool;
+import com.xiaolou.xiaolouainocodebackend.ai.tools.LogoGeneratorTool;
 import com.xiaolou.xiaolouainocodebackend.ai.tools.ToolManager;
 import com.xiaolou.xiaolouainocodebackend.common.ErrorCode;
 import com.xiaolou.xiaolouainocodebackend.exception.BusinessException;
@@ -42,6 +44,12 @@ public class AiCodeGeneratorServiceFactory {
 
     @Resource
     private ToolManager toolManager;
+
+    @Resource
+    private ImageSearchTool imageSearchTool;
+
+    @Resource
+    private LogoGeneratorTool logoGeneratorTool;
 
     /**
      * AI 服务实例缓存
