@@ -1,6 +1,7 @@
 package com.xiaolou.xiaolouainocodebackend.ai.config;
 
 import com.xiaolou.xiaolouainocodebackend.ai.ImageCollectionService;
+import com.xiaolou.xiaolouainocodebackend.ai.tools.ImageGeneratorTool;
 import com.xiaolou.xiaolouainocodebackend.ai.tools.ImageSearchTool;
 import com.xiaolou.xiaolouainocodebackend.ai.tools.LogoGeneratorTool;
 import dev.langchain4j.model.chat.ChatModel;
@@ -21,11 +22,15 @@ public class ImageCollectionServiceConfig {
     @Resource
     private LogoGeneratorTool logoGeneratorTool;
 
+    @Resource
+    private ImageGeneratorTool imageGeneratorTool;
+
     @Bean
     public ImageCollectionService imageCollectionService() {
         return AiServices.builder(ImageCollectionService.class)
                 .chatModel(chatModel)
-                .tools(imageSearchTool, logoGeneratorTool)
+                .tools(imageSearchTool, logoGeneratorTool, imageGeneratorTool)
+                .maxSequentialToolsInvocations(10)
                 .build();
     }
 }
