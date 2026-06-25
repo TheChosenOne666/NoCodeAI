@@ -3,10 +3,12 @@ package com.xiaolou.xiaolouainocodebackend.service;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.xiaolou.xiaolouainocodebackend.model.dto.app.AppAddRequest;
 import com.xiaolou.xiaolouainocodebackend.model.dto.app.AppQueryRequest;
+import com.xiaolou.xiaolouainocodebackend.model.dto.codegen.CodeGenStreamEvent;
 import com.xiaolou.xiaolouainocodebackend.model.entity.App;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.xiaolou.xiaolouainocodebackend.model.entity.User;
 import com.xiaolou.xiaolouainocodebackend.model.vo.AppVO;
+import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -53,10 +55,22 @@ public interface AppService extends IService<App> {
      *
      * @param appId
      * @param message
+     * @param requestId 请求ID，用于与右侧代码实时展示SSE共享同一次AI生成
      * @param loginUser
      * @return
      */
-    Flux<String> chatToGenCode(Long appId, String message, User loginUser);
+    Flux<String> chatToGenCode(Long appId, String message, String requestId, User loginUser);
+
+    /**
+     * 获取 Vue 项目代码生成实时展示流（右侧代码预览专用）
+     *
+     * @param appId     应用ID
+     * @param message   用户消息
+     * @param requestId 请求ID，用于与左侧对话SSE共享同一次AI生成
+     * @param loginUser 当前登录用户
+     * @return 结构化 SSE 事件流
+     */
+    Flux<ServerSentEvent<CodeGenStreamEvent>> getVueProjectGenStreamDetail(Long appId, String message, String requestId, User loginUser);
 
     /**
      * 部署应用

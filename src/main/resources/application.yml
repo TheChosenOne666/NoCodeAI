@@ -27,6 +27,10 @@ server:
   port: 8123
   servlet:
     context-path: /api
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
     # cookie 30 天过期
     session:
       cookie:

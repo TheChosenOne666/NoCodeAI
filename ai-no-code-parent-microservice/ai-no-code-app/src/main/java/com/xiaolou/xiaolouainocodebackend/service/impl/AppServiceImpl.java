@@ -22,6 +22,8 @@ import com.xiaolou.xiaolouainocodebackend.innerservice.InnerUserService;
 import com.xiaolou.xiaolouainocodebackend.mapper.AppMapper;
 import com.xiaolou.xiaolouainocodebackend.model.dto.app.AppAddRequest;
 import com.xiaolou.xiaolouainocodebackend.model.dto.app.AppQueryRequest;
+import com.xiaolou.xiaolouainocodebackend.model.dto.codegen.CodeGenStreamEvent;
+import com.xiaolou.xiaolouainocodebackend.model.enums.CodeGenTypeEnum;
 import com.xiaolou.xiaolouainocodebackend.model.entity.App;
 import com.xiaolou.xiaolouainocodebackend.model.entity.User;
 import com.xiaolou.xiaolouainocodebackend.model.enums.ChatHistoryMessageTypeEnum;
@@ -36,6 +38,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.dubbo.config.annotation.DubboReference;
 import org.apache.dubbo.config.annotation.DubboService;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -184,7 +187,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
     }
 
     @Override
-    public Flux<String> chatToGenCode(Long appId, String message, User loginUser) {
+    public Flux<String> chatToGenCode(Long appId, String message, String requestId, User loginUser) {
         // 参数校验
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID不能为空");
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
@@ -203,10 +206,37 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         // 5. 通过校验后，添加用户消息到对话历史
         chatHistoryService.addChatMessage(appId, message, ChatHistoryMessageTypeEnum.USER.getValue(), loginUser.getId());
         // 6. 调用 AI 生成代码（流式）
-        Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId);
+        Flux<String> codeStream = aiCodeGeneratorFacade.generateAndSaveCodeStream(message, codeGenTypeEnum, appId, requestId);
         // 7. 收集 AI 响应内容并在完成后记录到对话历史
         return streamHandlerExecutor.doExecute(codeStream, chatHistoryService, appId, loginUser, codeGenTypeEnum);
 
+    }
+
+    @Override
+    public Flux<ServerSentEvent<CodeGenStreamEvent>> getVueProjectGenStreamDetail(Long appId, String message, String requestId, User loginUser) {
+        // 参数校验
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID不能为空");
+        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
+        App app = this.getById(appId);
+        ThrowUtils.throwIf(app == null, ErrorCode.PARAMS_ERROR, "应用不存在");
+        // 验证用户是否有权限访问该应用，仅本人可生成代码
+        if(!Objects.equals(app.getUserId(), loginUser.getId())) {
+            throw new BusinessException(ErrorCode.FORBIDDEN_ERROR, "无权限访问该应用");
+        }
+        // 获取应用的代码生成类型
+        String codeGenTypeStr = app.getCodeGenType();
+        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenTypeStr);
+        if (codeGenTypeEnum != CodeGenTypeEnum.VUE_PROJECT) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "仅 Vue 项目支持代码实时展示流");
+        }
+        // 调用 AI 生成代码结构化实时流
+        return aiCodeGeneratorFacade.generateVueProjectStreamDetail(message, appId, requestId);
+    }
+
+    @Override
+    public void stopVueProjectGenStream(String requestId) {
+        ThrowUtils.throwIf(StrUtil.isBlank(requestId), ErrorCode.PARAMS_ERROR, "requestId 不能为空");
+        aiCodeGeneratorFacade.stopVueProjectGenStream(requestId);
     }
 
     @Override

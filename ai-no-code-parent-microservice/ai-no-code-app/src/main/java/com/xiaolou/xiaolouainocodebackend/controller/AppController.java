@@ -1,6 +1,7 @@
 package com.xiaolou.xiaolouainocodebackend.controller;
 
 import cn.hutool.core.bean.BeanUtil;
+import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -16,6 +17,7 @@ import com.xiaolou.xiaolouainocodebackend.exception.BusinessException;
 import com.xiaolou.xiaolouainocodebackend.exception.ThrowUtils;
 import com.xiaolou.xiaolouainocodebackend.innerservice.InnerUserService;
 import com.xiaolou.xiaolouainocodebackend.model.dto.app.*;
+import com.xiaolou.xiaolouainocodebackend.model.dto.codegen.CodeGenStreamEvent;
 import com.xiaolou.xiaolouainocodebackend.model.entity.App;
 import com.xiaolou.xiaolouainocodebackend.model.entity.User;
 import com.xiaolou.xiaolouainocodebackend.model.vo.AppVO;
@@ -37,9 +39,12 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.io.File;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/app")
@@ -276,25 +281,35 @@ public class AppController {
     }
 
     /**
-     * 应用聊天生成代码（流式 SSE）
+     * 聊天并生成代码（流式）
      *
-     * @param appId   应用 ID
-     * @param message 用户消息
-     * @param request 请求对象
+     * @param appId     应用 ID
+     * @param message   用户消息
+     * @param requestId 请求 ID，用于和右侧代码实时展示流共享同一次 AI 生成
+     * @param request   请求对象
      * @return 生成结果流
      */
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RateLimit(rate = 2, rateInterval = 60, limitType = RateLimitType.USER, message = "AI 对话请求过于频繁，请稍后再试")
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
-                                      @RequestParam String message,
+                                      @RequestParam(required = false) String message,
+                                      @RequestParam(required = false) String requestId,
                                       HttpServletRequest request) {
+        // 从原始查询字符串解析 message，避免 Spring @RequestParam 在 SSE GET 请求下偶发解析为空
+        String rawQuery = request.getQueryString();
+        if (StrUtil.isBlank(message) && StrUtil.isNotBlank(rawQuery)) {
+            message = parseQueryStringParam(rawQuery, "message");
+            log.info("从原始查询字符串解析 message, appId={}, length={}", appId, message == null ? 0 : message.length());
+        }
+        log.info("chatToGenCode 收到请求, appId={}, messageLength={}, rawQuery={}", appId, message == null ? 0 : message.length(), rawQuery);
+
         // 参数校验
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
         // 获取当前登录用户
         User loginUser = InnerUserService.getLoginUser(request);
         // 调用服务生成代码（流式）
-        Flux<String> contentFlux = appService.chatToGenCode(appId, message, loginUser);
+        Flux<String> contentFlux = appService.chatToGenCode(appId, message, requestId, loginUser);
         return contentFlux.map(
                 chunk -> {
                     //将内容包装成json对象
@@ -306,10 +321,79 @@ public class AppController {
     }
 
     /**
+     * Vue 项目代码生成实时展示流（右侧代码预览专用）
+     *
+     * @param appId     应用 ID
+     * @param message   用户消息
+     * @param requestId 请求 ID，用于和左侧对话流共享同一次 AI 生成
+     * @param request   请求对象
+     * @return 结构化 SSE 事件流
+     */
+    @GetMapping(value = "/gen/stream/{appId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<CodeGenStreamEvent>> genStreamDetail(@PathVariable Long appId,
+                                                                     @RequestParam(required = false) String message,
+                                                                     @RequestParam(required = false) String requestId,
+                                                                     HttpServletRequest request) {
+        // 从原始查询字符串解析 message/requestId，避免 Spring @RequestParam 在 SSE GET 请求下偶发解析为空
+        String rawQuery = request.getQueryString();
+        if (StrUtil.isBlank(message) && StrUtil.isNotBlank(rawQuery)) {
+            message = parseQueryStringParam(rawQuery, "message");
+        }
+        if (StrUtil.isBlank(requestId) && StrUtil.isNotBlank(rawQuery)) {
+            requestId = parseQueryStringParam(rawQuery, "requestId");
+        }
+        log.info("genStreamDetail 收到请求, appId={}, messageLength={}, requestId={}", appId, message == null ? 0 : message.length(), requestId);
+
+        // 参数校验
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
+        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
+        ThrowUtils.throwIf(StrUtil.isBlank(requestId), ErrorCode.PARAMS_ERROR, "requestId 不能为空");
+        // 获取当前登录用户
+        User loginUser = InnerUserService.getLoginUser(request);
+        // 调用服务获取结构化实时流
+        return appService.getVueProjectGenStreamDetail(appId, message, requestId, loginUser);
+    }
+
+    /**
+     * 停止 Vue 项目 AI 生成会话
+     *
+     * @param requestId 请求 ID
+     * @return 操作结果
+     */
+    @PostMapping("/gen/stop")
+    public BaseResponse<Boolean> stopGenStream(@RequestParam String requestId) {
+        ThrowUtils.throwIf(StrUtil.isBlank(requestId), ErrorCode.PARAMS_ERROR, "requestId 不能为空");
+        appService.stopVueProjectGenStream(requestId);
+        return ResultUtils.success(true);
+    }
+
+    /**
+     * 获取 Vue 项目已生成的文件列表
+     *
+     * @param appId 应用 ID
+     * @return 文件相对路径列表
+     */
+    @GetMapping("/{appId}/files")
+    public BaseResponse<List<String>> getProjectFiles(@PathVariable Long appId) {
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
+        String projectPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + "vue_project_" + appId;
+        File projectDir = new File(projectPath);
+        if (!projectDir.exists() || !projectDir.isDirectory()) {
+            return ResultUtils.success(List.of());
+        }
+        List<File> files = FileUtil.loopFiles(projectDir, pathname -> pathname.isFile());
+        List<String> relativePaths = files.stream()
+                .map(file -> projectDir.toPath().relativize(file.toPath()).toString().replace("\\", "/"))
+                .sorted()
+                .collect(Collectors.toList());
+        return ResultUtils.success(relativePaths);
+    }
+
+    /**
      * 应用部署
      *
      * @param appDeployRequest 部署请求
-     * @param request          请求
+     * @param request 请求
      * @return 部署 URL
      */
     @PostMapping("/deploy")
@@ -360,5 +444,27 @@ public class AppController {
         projectDownloadService.downloadProjectAsZip(sourceDirPath, downloadFileName, response);
     }
 
+    /**
+     * 从原始查询字符串中解析指定参数（UTF-8 解码）
+     */
+    private String parseQueryStringParam(String queryString, String paramName) {
+        if (StrUtil.isBlank(queryString)) {
+            return null;
+        }
+        String prefix = paramName + "=";
+        int start = queryString.indexOf(prefix);
+        if (start == -1) {
+            return null;
+        }
+        start += prefix.length();
+        int end = queryString.indexOf("&", start);
+        String encodedValue = end == -1 ? queryString.substring(start) : queryString.substring(start, end);
+        try {
+            return URLDecoder.decode(encodedValue, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            log.warn("解析查询参数失败: paramName={}, encodedValue={}", paramName, encodedValue, e);
+            return null;
+        }
+    }
 
 }

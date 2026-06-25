@@ -29,7 +29,8 @@ public class ImageSearchTool extends BaseTool {
     @Tool("搜索内容相关的图片，用于网站内容展示")
     public String searchContentImages(@P("搜索关键词，描述需要的图片内容") String query) {
         List<Map<String, String>> imageList = new ArrayList<>();
-        int searchCount = 12;
+        // 减少返回数量以加速图片准备阶段
+        int searchCount = 6;
         
         try (HttpResponse response = HttpRequest.get(PEXELS_API_URL)
                 .header("Authorization", pexelsApiKey)

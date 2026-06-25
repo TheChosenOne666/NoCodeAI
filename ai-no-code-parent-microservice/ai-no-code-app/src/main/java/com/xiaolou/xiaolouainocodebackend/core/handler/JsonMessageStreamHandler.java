@@ -96,6 +96,10 @@ public class JsonMessageStreamHandler {
                     seenToolIds.add(toolId);
                     // 根据工具名称获取工具实例
                     BaseTool tool = toolManager.getTool(toolName);
+                    if (tool == null) {
+                        log.warn("未找到工具实例: {}", toolName);
+                        return String.format("\n\n[调用工具: %s]\n\n", toolName);
+                    }
                     // 返回格式化的工具调用信息
                     return tool.generateToolRequestResponse();
                 } else {
@@ -109,6 +113,10 @@ public class JsonMessageStreamHandler {
                 JSONObject jsonObject = JSONUtil.parseObj(toolExecutedMessage.getArguments());
                 // 根据工具名称获取工具实例并生成相应的结果格式
                 BaseTool tool = toolManager.getTool(toolName);
+                if (tool == null) {
+                    log.warn("未找到工具实例，无法格式化工具执行结果: {}", toolName);
+                    return "";
+                }
                 String result = tool.generateToolExecutedResult(jsonObject);
                 // 输出前端和要持久化的内容
                 String output = String.format("\n\n%s\n\n", result);

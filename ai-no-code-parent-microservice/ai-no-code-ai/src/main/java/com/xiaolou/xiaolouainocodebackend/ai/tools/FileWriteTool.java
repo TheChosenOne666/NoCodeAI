@@ -23,7 +23,13 @@ import java.nio.file.StandardOpenOption;
 @Component
 public class FileWriteTool extends BaseTool{
     @Tool("写入文件到指定路径")
-    public String writeFile(@P("文件的相对路径") String relativeFilePath, @P("要写入文件的内容") String content, @ToolMemoryId Long appId) {
+    public String writeFile(@P("文件的相对路径，例如 src/pages/Home.vue") String relativeFilePath, @P("要写入文件的内容") String content, @ToolMemoryId Long appId) {
+        if (relativeFilePath == null || relativeFilePath.isBlank()) {
+            return "文件写入失败：relativeFilePath 不能为空";
+        }
+        if (content == null) {
+            content = "";
+        }
         try {
             Path path = Paths.get(relativeFilePath);
             if (!path.isAbsolute()) {
@@ -61,13 +67,21 @@ public class FileWriteTool extends BaseTool{
     @Override
     public String generateToolExecutedResult(JSONObject arguments) {
         String relativeFilePath = arguments.getStr("relativeFilePath");
+        if (relativeFilePath == null || relativeFilePath.isBlank()) {
+            return "[工具调用] 写入文件参数错误：relativeFilePath 不能为空";
+        }
         String suffix = FileUtil.getSuffix(relativeFilePath);
         String content = arguments.getStr("content");
+        if (content == null) {
+            content = "";
+        }
+        // 过长的内容截断显示，避免前端卡顿
+        String displayContent = content.length() > 2000 ? content.substring(0, 2000) + "\n...（已截断）" : content;
         return String.format("""
                         [工具调用] %s %s
                         ```%s
                         %s
                         ```
-                        """, getDisplayName(), relativeFilePath, suffix, content);
+                        """, getDisplayName(), relativeFilePath, suffix, displayContent);
     }
 }

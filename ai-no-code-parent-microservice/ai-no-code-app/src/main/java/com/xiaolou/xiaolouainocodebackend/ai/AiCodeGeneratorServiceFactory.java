@@ -109,8 +109,8 @@ public class AiCodeGeneratorServiceFactory {
                         .streamingChatModel(reasoningStreamingChatModel)
                         .chatMemoryProvider(memoryId -> chatMemory)
                         .tools(toolManager.getAllTools())
-                        // 限制单次对话，工具调用次数最大为20，防止AI无限循环调用
-                        .maxSequentialToolsInvocations(20)
+                        // 限制单次对话，工具调用次数最大为100，防止AI无限循环调用
+                        .maxSequentialToolsInvocations(100)
                         // 添加输入护轨
                         .inputGuardrails(new PromptSafetyInputGuardrail())
                         .hallucinatedToolNameStrategy(toolExecutionRequest -> {

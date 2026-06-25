@@ -23,6 +23,8 @@ public class ReasoningStreamingChatModelConfig {
 
     private Double temperature;
 
+    private Integer maxTokens;
+
     private Boolean logRequests = false;
 
     private Boolean logResponses = false;
@@ -30,14 +32,17 @@ public class ReasoningStreamingChatModelConfig {
     @Bean
     @Scope("prototype")
     public StreamingChatModel reasoningStreamingChatModelPrototype() {
-        return OpenAiStreamingChatModel.builder()
+        OpenAiStreamingChatModel.OpenAiStreamingChatModelBuilder builder = OpenAiStreamingChatModel.builder()
                 .apiKey(apiKey)
                 .baseUrl(baseUrl)
                 .modelName(modelName)
                 .temperature(temperature)
                 .logRequests(logRequests)
                 .logResponses(logResponses)
-                .timeout(Duration.ofSeconds(120))
-                .build();
+                .timeout(Duration.ofSeconds(600));
+        if (maxTokens != null) {
+            builder.maxTokens(maxTokens);
+        }
+        return builder.build();
     }
 }

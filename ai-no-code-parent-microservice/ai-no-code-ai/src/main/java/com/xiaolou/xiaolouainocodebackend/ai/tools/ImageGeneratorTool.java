@@ -7,8 +7,10 @@ import com.volcengine.ark.runtime.model.images.generation.GenerateImagesRequest;
 import com.volcengine.ark.runtime.model.images.generation.ImagesResponse;
 import com.volcengine.ark.runtime.model.images.generation.ResponseFormat;
 import com.volcengine.ark.runtime.service.ArkService;
+import com.xiaolou.xiaolouainocodebackend.constant.AppConstant;
 import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
+import dev.langchain4j.agent.tool.ToolMemoryId;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -17,10 +19,17 @@ import okhttp3.Dispatcher;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.io.InputStream;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
@@ -56,7 +65,8 @@ public class ImageGeneratorTool extends BaseTool {
     }
 
     @Tool("根据描述生成内容相关的图片，用于网站内容展示。仅在搜索不到合适图片或需求特别复杂时使用")
-    public String generateContentImages(@P("图片描述，详细说明需要的图片内容、风格、场景等，尽量详细") String description) {
+    public String generateContentImages(@P("图片描述，详细说明需要的图片内容、风格、场景等，尽量详细") String description,
+                                        @ToolMemoryId Long appId) {
         List<Map<String, String>> imageList = new ArrayList<>();
         
         try {
@@ -65,7 +75,7 @@ public class ImageGeneratorTool extends BaseTool {
             GenerateImagesRequest generateRequest = GenerateImagesRequest.builder()
                     .model(imageModel)
                     .prompt(imagePrompt)
-                    .size("2k")
+                    .size("1k")
                     .sequentialImageGeneration("disabled")
                     .responseFormat(ResponseFormat.Url)
                     .stream(false)
@@ -78,8 +88,10 @@ public class ImageGeneratorTool extends BaseTool {
                 for (ImagesResponse.Image imageData : imagesResponse.getData()) {
                     String imageUrl = imageData.getUrl();
                     if (StrUtil.isNotBlank(imageUrl)) {
+                        // 下载图片到本地项目目录，避免临时 URL 过期
+                        String localUrl = downloadAndCacheImage(imageUrl, appId, "img");
                         Map<String, String> imageInfo = new HashMap<>();
-                        imageInfo.put("url", imageUrl);
+                        imageInfo.put("url", localUrl);
                         imageInfo.put("description", description);
                         imageList.add(imageInfo);
                     }
@@ -91,6 +103,39 @@ public class ImageGeneratorTool extends BaseTool {
         }
         
         return JSONUtil.toJsonStr(imageList);
+    }
+
+    /**
+     * 下载图片到本地项目目录，返回本地访问 URL
+     */
+    private String downloadAndCacheImage(String imageUrl, Long appId, String prefix) {
+        try {
+            String projectDirName = "vue_project_" + appId;
+            Path imagesDir = Paths.get(AppConstant.CODE_OUTPUT_ROOT_DIR, projectDirName, "public", "images");
+            Files.createDirectories(imagesDir);
+
+            String ext = "png";
+            String urlPath = URI.create(imageUrl).getPath();
+            if (urlPath != null && urlPath.contains(".")) {
+                String urlExt = urlPath.substring(urlPath.lastIndexOf('.') + 1);
+                if (urlExt.length() <= 4) {
+                    ext = urlExt;
+                }
+            }
+
+            String fileName = prefix + "_" + UUID.randomUUID().toString().substring(0, 8) + "." + ext;
+            Path targetPath = imagesDir.resolve(fileName);
+
+            try (InputStream in = URI.create(imageUrl).toURL().openStream()) {
+                Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
+            }
+
+            log.info("图片已缓存到本地: {}", targetPath.toAbsolutePath());
+            return "/images/" + fileName;
+        } catch (Exception e) {
+            log.error("下载图片到本地失败，使用原始 URL: {}", e.getMessage());
+            return imageUrl;
+        }
     }
 
     @Override

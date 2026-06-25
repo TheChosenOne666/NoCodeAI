@@ -25,12 +25,15 @@ public class PromptSafetyInputGuardrail implements InputGuardrail {
             Pattern.compile("(?i)new\\s+(?:instructions?|commands?|prompts?)\\s*:")
     );
 
+    // 最大允许输入长度（含系统追加的项目文件上下文）
+    private static final int MAX_INPUT_LENGTH = 20000;
+
     @Override
     public InputGuardrailResult validate(UserMessage userMessage) {
         String input = userMessage.singleText();
         // 检查输入长度
-        if (input.length() > 1000) {
-            return fatal("输入内容过长，不要超过 1000 字");
+        if (input.length() > MAX_INPUT_LENGTH) {
+            return fatal("输入内容过长，不要超过 " + (MAX_INPUT_LENGTH / 1000) + " 千字");
         }
         // 检查是否为空
         if (input.trim().isEmpty()) {

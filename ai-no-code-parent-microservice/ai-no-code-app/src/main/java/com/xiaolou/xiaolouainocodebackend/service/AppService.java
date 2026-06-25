@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.service.IService;
 import com.xiaolou.xiaolouainocodebackend.model.dto.app.AppAddRequest;
 import com.xiaolou.xiaolouainocodebackend.model.dto.app.AppQueryRequest;
+import com.xiaolou.xiaolouainocodebackend.model.dto.codegen.CodeGenStreamEvent;
 import com.xiaolou.xiaolouainocodebackend.model.entity.App;
 import com.xiaolou.xiaolouainocodebackend.model.entity.User;
 import com.xiaolou.xiaolouainocodebackend.model.vo.AppVO;
+import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
@@ -53,10 +55,29 @@ public interface AppService extends IService<App> {
      *
      * @param appId
      * @param message
+     * @param requestId
      * @param loginUser
      * @return
      */
-    Flux<String> chatToGenCode(Long appId, String message, User loginUser);
+    Flux<String> chatToGenCode(Long appId, String message, String requestId, User loginUser);
+
+    /**
+     * 获取 Vue 项目代码生成实时展示流（右侧代码预览专用）
+     *
+     * @param appId
+     * @param message
+     * @param requestId
+     * @param loginUser
+     * @return
+     */
+    Flux<ServerSentEvent<CodeGenStreamEvent>> getVueProjectGenStreamDetail(Long appId, String message, String requestId, User loginUser);
+
+    /**
+     * 停止 Vue 项目代码生成会话
+     *
+     * @param requestId 请求ID
+     */
+    void stopVueProjectGenStream(String requestId);
 
     /**
      * 部署应用

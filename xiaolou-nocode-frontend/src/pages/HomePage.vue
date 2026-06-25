@@ -95,7 +95,7 @@ const loadMyApps = async () => {
 
   try {
     const res = await listMyAppVoByPage({
-      pageNum: myAppsPage.current,
+      current: myAppsPage.current,
       pageSize: myAppsPage.pageSize,
       sortField: 'createTime',
       sortOrder: 'desc',
@@ -103,7 +103,7 @@ const loadMyApps = async () => {
 
     if (res.data.code === 0 && res.data.data) {
       myApps.value = res.data.data.records || []
-      myAppsPage.total = res.data.data.totalRow || 0
+      myAppsPage.total = res.data.data.total ?? res.data.data.totalRow ?? 0
     }
   } catch (error) {
     console.error('加载我的应用失败：', error)
@@ -114,7 +114,7 @@ const loadMyApps = async () => {
 const loadFeaturedApps = async () => {
   try {
     const res = await listGoodAppVoByPage({
-      pageNum: featuredAppsPage.current,
+      current: featuredAppsPage.current,
       pageSize: featuredAppsPage.pageSize,
       sortField: 'createTime',
       sortOrder: 'desc',
@@ -122,7 +122,7 @@ const loadFeaturedApps = async () => {
 
     if (res.data.code === 0 && res.data.data) {
       featuredApps.value = res.data.data.records || []
-      featuredAppsPage.total = res.data.data.totalRow || 0
+      featuredAppsPage.total = res.data.data.total ?? res.data.data.totalRow ?? 0
     }
   } catch (error) {
     console.error('加载精选应用失败：', error)
@@ -308,7 +308,7 @@ onMounted(() => {
             :total="myAppsPage.total"
             :show-size-changer="false"
             :show-total="(total: number) => `共 ${total} 个应用`"
-            @change="loadMyApps"
+            @change="(page: number) => { myAppsPage.current = page; loadMyApps(); }"
           />
         </div>
       </div>
@@ -333,7 +333,7 @@ onMounted(() => {
             :total="featuredAppsPage.total"
             :show-size-changer="false"
             :show-total="(total: number) => `共 ${total} 个案例`"
-            @change="loadFeaturedApps"
+            @change="(page: number) => { featuredAppsPage.current = page; loadFeaturedApps(); }"
           />
         </div>
       </div>

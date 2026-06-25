@@ -16,6 +16,7 @@ import com.xiaolou.xiaolouainocodebackend.constant.UserConstant;
 import com.xiaolou.xiaolouainocodebackend.exception.BusinessException;
 import com.xiaolou.xiaolouainocodebackend.exception.ThrowUtils;
 import com.xiaolou.xiaolouainocodebackend.model.dto.app.*;
+import com.xiaolou.xiaolouainocodebackend.model.dto.codegen.CodeGenStreamEvent;
 import com.xiaolou.xiaolouainocodebackend.model.entity.App;
 import com.xiaolou.xiaolouainocodebackend.model.entity.User;
 import com.xiaolou.xiaolouainocodebackend.model.vo.AppVO;
@@ -286,6 +287,7 @@ public class AppController {
     @RateLimit(rate = 2, rateInterval = 60, limitType = RateLimitType.USER, message = "AI 对话请求过于频繁，请稍后再试")
     public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
                                       @RequestParam String message,
+                                      @RequestParam(required = false) String requestId,
                                       HttpServletRequest request) {
         // 参数校验
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
@@ -293,7 +295,7 @@ public class AppController {
         // 获取当前登录用户
         User loginUser = userService.getLoginUser(request);
         // 调用服务生成代码（流式）
-        Flux<String> contentFlux = appService.chatToGenCode(appId, message, loginUser);
+        Flux<String> contentFlux = appService.chatToGenCode(appId, message, requestId, loginUser);
         return contentFlux.map(
                 chunk -> {
                     //将内容包装成json对象
@@ -302,6 +304,29 @@ public class AppController {
                     return ServerSentEvent.<String>builder().data(jsonData).build();
                 })
                 .concatWith(Mono.just(ServerSentEvent.<String>builder().event("done").data("").build()));
+    }
+
+    /**
+     * Vue 项目代码生成实时展示流（右侧代码预览专用）
+     *
+     * @param appId   应用 ID
+     * @param message 用户消息
+     * @param request 请求对象
+     * @return 结构化 SSE 事件流
+     */
+    @GetMapping(value = "/gen/stream/{appId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @RateLimit(rate = 2, rateInterval = 60, limitType = RateLimitType.USER, message = "AI 对话请求过于频繁，请稍后再试")
+    public Flux<ServerSentEvent<CodeGenStreamEvent>> genStreamDetail(@PathVariable Long appId,
+                                                                     @RequestParam String message,
+                                                                     @RequestParam(required = false) String requestId,
+                                                                     HttpServletRequest request) {
+        // 参数校验
+        ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
+        ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
+        // 获取当前登录用户
+        User loginUser = userService.getLoginUser(request);
+        // 调用服务获取结构化实时流
+        return appService.getVueProjectGenStreamDetail(appId, message, requestId, loginUser);
     }
 
     /**

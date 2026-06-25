@@ -107,8 +107,9 @@ class AiServiceStreamingResponseHandler implements StreamingChatResponseHandler 
 
     @Override
     public void onPartialToolExecutionRequest(int index, ToolExecutionRequest partialToolExecutionRequest) {
-        // If we're using output guardrails, then buffer the partial response until the guardrails have completed
-        partialToolExecutionRequestHandler.accept(index, partialToolExecutionRequest);
+        if (partialToolExecutionRequestHandler != null) {
+            partialToolExecutionRequestHandler.accept(index, partialToolExecutionRequest);
+        }
     }
 
     @Override
@@ -122,19 +123,26 @@ class AiServiceStreamingResponseHandler implements StreamingChatResponseHandler 
                     String toolName = toolExecutionRequest.name();
                     ToolExecutor toolExecutor = toolExecutors.get(toolName);
 
-                    // 验证工具参数JSON格式
-                    String arguments = toolExecutionRequest.arguments();
-                    if (!isValidJson(arguments)) {
-                        LOG.error("Invalid tool arguments JSON for tool '{}': {}", toolName, arguments);
-                        // 使用空对象继续执行，避免整个流程失败
-                        toolExecutionRequest = ToolExecutionRequest.builder()
-                                .id(toolExecutionRequest.id())
-                                .name(toolName)
-                                .arguments("{}")
-                                .build();
-                    }
+                    String toolExecutionResult;
+                    if (toolExecutor == null) {
+                        // 工具未找到（AI 幻觉出不存在的方法名），降级处理
+                        LOG.warn("Tool '{}' not found in toolExecutors, applying hallucinated tool name strategy", toolName);
+                        toolExecutionResult = "Error: Tool '" + toolName + "' not found";
+                    } else {
+                        // 验证工具参数JSON格式
+                        String arguments = toolExecutionRequest.arguments();
+                        if (!isValidJson(arguments)) {
+                            LOG.error("Invalid tool arguments JSON for tool '{}': {}", toolName, arguments);
+                            // 使用空对象继续执行，避免整个流程失败
+                            toolExecutionRequest = ToolExecutionRequest.builder()
+                                    .id(toolExecutionRequest.id())
+                                    .name(toolName)
+                                    .arguments("{}")
+                                    .build();
+                        }
 
-                    String toolExecutionResult = toolExecutor.execute(toolExecutionRequest, memoryId);
+                        toolExecutionResult = toolExecutor.execute(toolExecutionRequest, memoryId);
+                    }
                     // 确保toolExecutionResult不为null或空
                     String resultText = (toolExecutionResult != null && !toolExecutionResult.isEmpty()) 
                             ? toolExecutionResult 

@@ -51,10 +51,13 @@ public class StaticResourceController {
             if (!file.exists()) {
                 return ResponseEntity.notFound().build();
             }
-            // 返回文件资源
+            // 返回文件资源，禁用缓存确保预览始终显示最新内容
             Resource resource = new FileSystemResource(file);
             return ResponseEntity.ok()
-                    .header("Content-Type", getContentTypeWithCharset(filePath))
+                    .header(HttpHeaders.CONTENT_TYPE, getContentTypeWithCharset(filePath))
+                    .header(HttpHeaders.CACHE_CONTROL, "no-cache, no-store, must-revalidate")
+                    .header(HttpHeaders.PRAGMA, "no-cache")
+                    .header(HttpHeaders.EXPIRES, "0")
                     .body(resource);
         } catch (Exception e) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();

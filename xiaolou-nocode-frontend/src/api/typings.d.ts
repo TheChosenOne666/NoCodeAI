@@ -15,7 +15,7 @@ declare namespace API {
   }
 
   type AppQueryRequest = {
-    pageNum?: number
+    current?: number
     pageSize?: number
     sortField?: string
     sortOrder?: string
@@ -184,6 +184,7 @@ declare namespace API {
     pageNumber?: number
     pageSize?: number
     totalPage?: number
+    total?: number
     totalRow?: number
     optimizeCountQuery?: boolean
   }
@@ -193,6 +194,7 @@ declare namespace API {
     pageNumber?: number
     pageSize?: number
     totalPage?: number
+    total?: number
     totalRow?: number
     optimizeCountQuery?: boolean
   }
@@ -202,6 +204,7 @@ declare namespace API {
     pageNumber?: number
     pageSize?: number
     totalPage?: number
+    total?: number
     totalRow?: number
     optimizeCountQuery?: boolean
   }

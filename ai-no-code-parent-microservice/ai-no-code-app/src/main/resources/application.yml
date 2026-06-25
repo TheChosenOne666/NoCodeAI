@@ -26,6 +26,10 @@ server:
   port: 8123
   servlet:
     context-path: /api
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
     # cookie 30 天过期
     session:
       cookie:
@@ -77,6 +81,7 @@ langchain4j:
       api-key: <Your API Key>
       model-name: deepseek-reasoner
       temperature: 0.1
+      max-tokens: 8192
       log-requests: true
       log-responses: true
     # 智能路由 AI 模型配置（用于简单的分类任务）
@@ -99,8 +104,10 @@ image-model: <Your Image Model>
 # Dubbo
 dubbo:
   registry:
-    address: nacos://127.0.0.1:8848
+    address: nacos://127.0.0.1:8848?file-cache=false
     register-mode: instance
+    parameters:
+      file-cache: false
   protocol:
     name: tri
     port: 50053

@@ -14,8 +14,18 @@ export default defineConfig({
   },
   server: {
     proxy: {
+      '/api/user': {
+        target: 'http://localhost:8124',
+        changeOrigin: true,
+        secure: false,
+      },
+      '/api/app': {
+        target: 'http://localhost:8123',
+        changeOrigin: true,
+        secure: false,
+      },
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'http://localhost:8123',
         changeOrigin: true,
         secure: false,
       },

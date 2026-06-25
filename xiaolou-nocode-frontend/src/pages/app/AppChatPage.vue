@@ -132,13 +132,23 @@
             />
             <div class="input-actions">
               <a-button
+                  v-if="!isGenerating"
                   type="primary"
                   @click="sendMessage"
-                  :loading="isGenerating"
                   :disabled="!isOwner"
               >
                 <template #icon>
                   <SendOutlined />
+                </template>
+              </a-button>
+              <a-button
+                  v-else
+                  type="primary"
+                  danger
+                  @click="stopGeneration"
+              >
+                <template #icon>
+                  <StopOutlined />
                 </template>
               </a-button>
             </div>
@@ -148,7 +158,29 @@
       <!-- 右侧网页展示区域 -->
       <div class="preview-section">
         <div class="preview-header">
-          <h3>生成后的网页展示</h3>
+          <template v-if="isVueProject && vuePreviewReady">
+            <div class="vue-preview-tabs">
+              <div
+                  class="vue-preview-tab"
+                  :class="{ active: activeVueTab === 'preview' }"
+                  @click="activeVueTab = 'preview'"
+              >
+                <EyeOutlined />
+                <span>应用预览</span>
+              </div>
+              <div
+                  class="vue-preview-tab"
+                  :class="{ active: activeVueTab === 'code' }"
+                  @click="activeVueTab = 'code'"
+              >
+                <CodeOutlined />
+                <span>代码</span>
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <h3>生成后的网页展示</h3>
+          </template>
           <div class="preview-actions">
             <a-button
                 v-if="isOwner && previewUrl"
@@ -172,21 +204,50 @@
           </div>
         </div>
         <div class="preview-content">
-          <div v-if="!previewUrl && !isGenerating" class="preview-placeholder">
-            <div class="placeholder-icon">🌐</div>
-            <p>网站文件生成完成后将在这里展示</p>
-          </div>
-          <div v-else-if="isGenerating" class="preview-loading">
-            <a-spin size="large" />
-            <p>正在生成网站...</p>
-          </div>
-          <iframe
-              v-else
-              :src="previewUrl"
-              class="preview-iframe"
-              frameborder="0"
-              @load="onIframeLoad"
-          ></iframe>
+          <template v-if="isVueProject">
+            <!-- Vue 项目：代码实时预览，生成阶段始终渲染以接收事件 -->
+            <CodeGenViewer
+                v-if="isGenerating || vuePreviewReady"
+                v-show="!vuePreviewReady || activeVueTab === 'code'"
+                ref="codeGenViewerRef"
+                :is-building="isCodeGenBuilding"
+            />
+            <!-- Vue 项目：生成中动画，覆盖在代码实时预览上方 -->
+            <GeneratingAnimation
+                v-if="isGenerating && !hasReceivedFirstFileEvent"
+                class="generating-overlay"
+            />
+            <!-- Vue 项目：预览 iframe -->
+            <iframe
+                v-if="vuePreviewReady && activeVueTab === 'preview'"
+                :src="vuePreviewUrl"
+                class="preview-iframe"
+                frameborder="0"
+                @load="onIframeLoad"
+            ></iframe>
+            <!-- Vue 项目：初始占位 -->
+            <div v-if="!isGenerating && !vuePreviewReady" class="preview-placeholder">
+              <div class="placeholder-icon">🌐</div>
+              <p>网站文件生成完成后将在这里展示</p>
+            </div>
+          </template>
+          <template v-else>
+            <div v-if="!previewUrl && !isGenerating" class="preview-placeholder">
+              <div class="placeholder-icon">🌐</div>
+              <p>网站文件生成完成后将在这里展示</p>
+            </div>
+            <div v-else-if="isGenerating" class="preview-loading">
+              <a-spin size="large" />
+              <p>正在生成网站...</p>
+            </div>
+            <iframe
+                v-else
+                :src="previewUrl"
+                class="preview-iframe"
+                frameborder="0"
+                @load="onIframeLoad"
+            ></iframe>
+          </template>
         </div>
       </div>
     </div>
@@ -210,7 +271,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick, onUnmounted, computed } from 'vue'
+import { ref, onMounted, nextTick, onUnmounted, computed, defineAsyncComponent } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { useLoginUserStore } from '@/stores/loginUser'
@@ -226,6 +287,8 @@ import request from '@/request'
 import MarkdownRenderer from '@/components/MarkdownRenderer.vue'
 import AppDetailModal from '@/components/AppDetailModal.vue'
 import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
+import GeneratingAnimation from '@/components/GeneratingAnimation.vue'
+import { type CodeGenStreamEvent } from '@/components/CodeGenViewer.vue'
 import aiAvatar from '@/assets/aiAvatar.png'
 import { API_BASE_URL, getStaticPreviewUrl } from '@/config/env'
 import { VisualEditor, type ElementInfo } from '@/utils/visualEditor'
@@ -233,11 +296,16 @@ import { VisualEditor, type ElementInfo } from '@/utils/visualEditor'
 import {
   CloudUploadOutlined,
   SendOutlined,
+  StopOutlined,
   ExportOutlined,
   InfoCircleOutlined,
   DownloadOutlined,
   EditOutlined,
+  EyeOutlined,
+  CodeOutlined,
 } from '@ant-design/icons-vue'
+
+const CodeGenViewer = defineAsyncComponent(() => import('@/components/CodeGenViewer.vue'))
 
 const route = useRoute()
 const router = useRouter()
@@ -258,6 +326,8 @@ interface Message {
 const messages = ref<Message[]>([])
 const userInput = ref('')
 const isGenerating = ref(false)
+const currentRequestId = ref('')
+const chatEventSource = ref<EventSource | null>(null)
 const messagesContainer = ref<HTMLElement>()
 
 // 对话历史相关
@@ -269,6 +339,17 @@ const historyLoaded = ref(false)
 // 预览相关
 const previewUrl = ref('')
 const previewReady = ref(false)
+
+// Vue 项目代码实时展示相关
+const codeGenViewerRef = ref<InstanceType<typeof CodeGenViewer> | null>(null)
+const codeGenStreamSource = ref<EventSource | null>(null)
+const hasReceivedFirstFileEvent = ref(false)
+const vuePreviewReady = ref(false)
+const vuePreviewUrl = ref('')
+const activeVueTab = ref<'preview' | 'code'>('preview')
+const isCodeGenBuilding = ref(false)
+
+const isVueProject = computed(() => appInfo.value?.codeGenType === CodeGenTypeEnum.VUE_PROJECT)
 
 // 部署相关
 const deploying = ref(false)
@@ -368,6 +449,23 @@ const loadMoreHistory = async () => {
   await loadChatHistory(true)
 }
 
+// 加载已生成的项目文件树
+const loadProjectFiles = async () => {
+  if (!appId.value || !isVueProject.value) return
+  try {
+    const res = await request.get(`/app/${appId.value}/files`)
+    if (res.data.code === 0 && Array.isArray(res.data.data)) {
+      const files = res.data.data as string[]
+      if (files.length > 0) {
+        codeGenViewerRef.value?.loadFiles(files)
+        console.log('已加载已有文件树，文件数:', files.length)
+      }
+    }
+  } catch (error) {
+    console.error('加载项目文件树失败:', error)
+  }
+}
+
 // 获取应用信息
 const fetchAppInfo = async () => {
   const id = route.params.id as string
@@ -388,14 +486,17 @@ const fetchAppInfo = async () => {
       // 先加载对话历史
       await loadChatHistory()
       console.log('加载对话历史后，消息数量:', messages.value.length)
-      
+
+      // 加载已生成的文件树（如果有）
+      await loadProjectFiles()
+
       // 如果有对话记录，直接展示对应的网站
       if (messages.value.length > 0) {
-        updatePreview()
+        await updatePreview()
         console.log('已更新预览URL:', previewUrl.value)
       } else if (appInfo.value.deployKey) {
         // 如果没有对话历史但应用已部署过，也显示预览
-        updatePreview()
+        await updatePreview()
         console.log('应用已部署，已更新预览URL:', previewUrl.value)
       } else {
         // 检查是否有初始提示词（从路由参数获取）
@@ -437,16 +538,27 @@ const sendInitialMessage = async (prompt: string) => {
 
   // 开始生成
   isGenerating.value = true
-  await generateCode(prompt, aiMessageIndex)
+  const requestId = crypto.randomUUID()
+  currentRequestId.value = requestId
+  if (isVueProject.value) {
+    startVueProjectStreamDetail(prompt, requestId)
+  }
+  await generateCode(prompt, aiMessageIndex, requestId)
 }
 
 // 发送消息
 const sendMessage = async () => {
-  if (!userInput.value.trim() || isGenerating.value) {
+  const rawInput = userInput.value.trim()
+  if (!rawInput || isGenerating.value) {
     return
   }
 
-  let message = userInput.value.trim()
+  // 立即锁定输入并清空，防止重复发送
+  isGenerating.value = true
+  userInput.value = ''
+  await nextTick()
+
+  let message = rawInput
   // 如果有选中的元素，将元素信息添加到提示词中
   if (selectedElementInfo.value) {
     let elementContext = `\n\n选中元素信息：`
@@ -459,7 +571,7 @@ const sendMessage = async () => {
     }
     message += elementContext
   }
-  userInput.value = ''
+
   // 添加用户消息（包含元素信息）
   messages.value.push({
     type: 'user',
@@ -486,12 +598,53 @@ const sendMessage = async () => {
   scrollToBottom()
 
   // 开始生成
-  isGenerating.value = true
-  await generateCode(message, aiMessageIndex)
+  const requestId = crypto.randomUUID()
+  currentRequestId.value = requestId
+  if (isVueProject.value) {
+    startVueProjectStreamDetail(message, requestId)
+  }
+  await generateCode(message, aiMessageIndex, requestId)
+}
+
+// 停止生成
+const stopGeneration = async () => {
+  if (!isGenerating.value) {
+    return
+  }
+
+  // 关闭 SSE 连接
+  closeCodeGenStream()
+  if (chatEventSource.value) {
+    chatEventSource.value.close()
+    chatEventSource.value = null
+  }
+
+  // 通知后端停止当前 requestId 的生成会话
+  if (currentRequestId.value) {
+    try {
+      const baseURL = request.defaults.baseURL || API_BASE_URL
+      await fetch(`${baseURL}/app/gen/stop?requestId=${encodeURIComponent(currentRequestId.value)}`, {
+        method: 'POST',
+        credentials: 'include',
+      })
+    } catch (error) {
+      console.error('停止生成请求失败:', error)
+    }
+  }
+
+  isGenerating.value = false
 }
 
 // 生成代码 - 使用 EventSource 处理流式响应
-const generateCode = async (userMessage: string, aiMessageIndex: number) => {
+const generateCode = async (userMessage: string, aiMessageIndex: number, requestId?: string) => {
+  const trimmedMessage = userMessage?.trim() || ''
+  if (!trimmedMessage) {
+    messages.value[aiMessageIndex].content = '抱歉，消息内容不能为空，请重新输入。'
+    messages.value[aiMessageIndex].loading = false
+    isGenerating.value = false
+    return
+  }
+
   let eventSource: EventSource | null = null
   let streamCompleted = false
 
@@ -499,18 +652,22 @@ const generateCode = async (userMessage: string, aiMessageIndex: number) => {
     // 获取 axios 配置的 baseURL
     const baseURL = request.defaults.baseURL || API_BASE_URL
 
-    // 构建URL参数
-    const params = new URLSearchParams({
-      appId: appId.value || '',
-      message: userMessage,
-    })
+    // 手动编码 URL 参数，避免特殊字符导致参数解析异常
+    const queryParams = new URLSearchParams()
+    queryParams.set('appId', String(appId.value || ''))
+    queryParams.set('message', trimmedMessage)
+    if (requestId) {
+      queryParams.set('requestId', requestId)
+    }
 
-    const url = `${baseURL}/app/chat/gen/code?${params}`
+    const url = `${baseURL}/app/chat/gen/code?${queryParams.toString()}`
+    console.log('生成代码请求 URL:', url.substring(0, 200) + (url.length > 200 ? '...' : ''))
 
     // 创建 EventSource 连接
     eventSource = new EventSource(url, {
       withCredentials: true,
     })
+    chatEventSource.value = eventSource
 
     let fullContent = ''
 
@@ -541,13 +698,17 @@ const generateCode = async (userMessage: string, aiMessageIndex: number) => {
       if (streamCompleted) return
 
       streamCompleted = true
-      isGenerating.value = false
+      // Vue 项目的生成状态由代码实时展示流事件控制
+      if (!isVueProject.value) {
+        isGenerating.value = false
+      }
       eventSource?.close()
+      chatEventSource.value = null
 
       // 延迟更新预览，确保后端已完成处理
       setTimeout(async () => {
         await fetchAppInfo()
-        updatePreview()
+        await updatePreview()
       }, 1000)
     })
 
@@ -582,10 +743,11 @@ const generateCode = async (userMessage: string, aiMessageIndex: number) => {
         streamCompleted = true
         isGenerating.value = false
         eventSource?.close()
+        chatEventSource.value = null
 
         setTimeout(async () => {
           await fetchAppInfo()
-          updatePreview()
+          await updatePreview()
         }, 1000)
       } else {
         handleError(new Error('SSE连接错误'), aiMessageIndex)
@@ -606,13 +768,134 @@ const handleError = (error: unknown, aiMessageIndex: number) => {
   isGenerating.value = false
 }
 
+// 启动 Vue 项目代码实时展示 SSE
+const startVueProjectStreamDetail = (userMessage: string, requestId?: string) => {
+  const trimmedMessage = userMessage?.trim() || ''
+  if (!trimmedMessage) {
+    console.warn('拒绝启动空的 Vue 项目代码实时展示流')
+    return
+  }
+
+  // 关闭旧的连接
+  closeCodeGenStream()
+
+  // 重置 Vue 项目展示状态
+  hasReceivedFirstFileEvent.value = false
+  vuePreviewReady.value = false
+  vuePreviewUrl.value = ''
+  activeVueTab.value = 'preview'
+  isCodeGenBuilding.value = false
+  codeGenViewerRef.value?.reset()
+
+  try {
+    const baseURL = request.defaults.baseURL || API_BASE_URL
+    const params = new URLSearchParams()
+    params.set('message', trimmedMessage)
+    if (requestId) {
+      params.set('requestId', requestId)
+    }
+    const url = `${baseURL}/app/gen/stream/${appId.value}?${params.toString()}`
+
+    const eventSource = new EventSource(url, {
+      withCredentials: true,
+    })
+    codeGenStreamSource.value = eventSource
+
+    eventSource.onmessage = (event) => {
+      try {
+        const streamEvent: CodeGenStreamEvent = JSON.parse(event.data)
+        handleCodeGenStreamEvent(streamEvent)
+      } catch (error) {
+        console.error('解析代码实时展示事件失败:', error, event.data)
+      }
+    }
+
+    eventSource.onerror = () => {
+      console.error('Vue 项目代码实时展示 SSE 连接错误')
+      eventSource.close()
+      codeGenStreamSource.value = null
+      isCodeGenBuilding.value = false
+    }
+  } catch (error) {
+    console.error('创建 Vue 项目代码实时展示 SSE 失败:', error)
+  }
+}
+
+// 处理 Vue 项目代码实时展示事件
+const handleCodeGenStreamEvent = (streamEvent: CodeGenStreamEvent) => {
+  // 转发给 CodeGenViewer 处理文件/代码事件
+  codeGenViewerRef.value?.handleStreamEvent(streamEvent)
+
+  switch (streamEvent.type) {
+    case 'file-start':
+      if (!hasReceivedFirstFileEvent.value) {
+        hasReceivedFirstFileEvent.value = true
+      }
+      break
+    case 'build-start':
+      isCodeGenBuilding.value = true
+      break
+    case 'build-end':
+      isCodeGenBuilding.value = false
+      break
+    case 'preview-ready':
+      if (streamEvent.url) {
+        // 将相对路径转为完整 URL，并加时间戳避免缓存
+        const previewFullUrl = streamEvent.url.startsWith('http')
+          ? streamEvent.url
+          : `${API_BASE_URL}${streamEvent.url.replace(/^\/api/, '')}`
+        const previewUrlWithCache = `${previewFullUrl}?t=${Date.now()}`
+        vuePreviewUrl.value = previewUrlWithCache
+        vuePreviewReady.value = true
+        activeVueTab.value = 'preview'
+        // 同时更新普通预览 URL，保持一致
+        previewUrl.value = previewFullUrl
+        previewReady.value = true
+      }
+      // 构建完成并可以预览，释放生成状态
+      isGenerating.value = false
+      break
+    case 'error':
+      isCodeGenBuilding.value = false
+      isGenerating.value = false
+      message.error(streamEvent.message || '生成失败')
+      break
+  }
+}
+
+// 关闭 Vue 项目代码实时展示 SSE
+const closeCodeGenStream = () => {
+  if (codeGenStreamSource.value) {
+    codeGenStreamSource.value.close()
+    codeGenStreamSource.value = null
+  }
+}
+
 // 更新预览
-const updatePreview = () => {
-  if (appId.value) {
-    const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
-    const newPreviewUrl = getStaticPreviewUrl(codeGenType, appId.value)
-    previewUrl.value = newPreviewUrl
-    previewReady.value = true
+const updatePreview = async () => {
+  if (!appId.value) {
+    return
+  }
+  const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
+  const newPreviewUrl = getStaticPreviewUrl(codeGenType, appId.value)
+  previewUrl.value = newPreviewUrl
+  previewReady.value = true
+
+  // Vue 项目需要同时设置右侧预览状态
+  if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {
+    // 先确认 dist/index.html 真的存在，避免显示 404
+    try {
+      const res = await fetch(newPreviewUrl, {
+        method: 'HEAD',
+        credentials: 'include',
+      })
+      if (res.ok) {
+        vuePreviewUrl.value = `${newPreviewUrl}?t=${Date.now()}`
+        vuePreviewReady.value = true
+      }
+    } catch (error) {
+      console.log('Vue 预览文件尚未生成:', error)
+    }
   }
 }
 
@@ -768,6 +1051,31 @@ const getInputPlaceholder = () => {
   return '请描述你想生成的网站，越详细效果越好哦'
 }
 
+// 页面离开/关闭时通知后端停止生成
+const stopGenOnLeave = () => {
+  if (!currentRequestId.value || !isGenerating.value) return
+  const baseURL = request.defaults.baseURL || ''
+  const url = `${baseURL}/app/gen/stop?requestId=${encodeURIComponent(currentRequestId.value)}`
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon(url)
+  } else {
+    try {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', url, false)
+      xhr.send()
+    } catch (e) {
+      console.error('页面离开时停止生成失败:', e)
+    }
+  }
+}
+
+const handleVisibilityChange = () => {
+  // 页面隐藏超过 30 秒且仍在生成，则主动停止（可选的兜底策略）
+  if (document.hidden && isGenerating.value) {
+    console.log('页面隐藏，继续保持生成监听')
+  }
+}
+
 // 页面加载时获取应用信息
 onMounted(() => {
   fetchAppInfo()
@@ -776,11 +1084,20 @@ onMounted(() => {
   window.addEventListener('message', (event) => {
     visualEditor.handleIframeMessage(event)
   })
+
+  // 页面关闭/刷新/隐藏前停止生成
+  window.addEventListener('beforeunload', stopGenOnLeave)
+  window.addEventListener('pagehide', stopGenOnLeave)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
 })
 
 // 清理资源
 onUnmounted(() => {
-  // EventSource 会在组件卸载时自动清理
+  closeCodeGenStream()
+  stopGenOnLeave()
+  window.removeEventListener('beforeunload', stopGenOnLeave)
+  window.removeEventListener('pagehide', stopGenOnLeave)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
 })
 </script>
 
@@ -948,6 +1265,43 @@ onUnmounted(() => {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+}
+
+.vue-preview-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.vue-preview-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #666;
+  transition: all 0.2s;
+}
+
+.vue-preview-tab:hover {
+  background: #f5f5f5;
+}
+
+.vue-preview-tab.active {
+  background: #1890ff;
+  color: white;
+}
+
+.generating-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: white;
+  z-index: 10;
 }
 
 .preview-actions {
