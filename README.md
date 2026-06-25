@@ -8,11 +8,15 @@
 
 ## 平台预览
 
+![平台封面 - 首页总览](docs/images/00-cover.png)
+
 ![应用构建平台 - 仪表盘总览](docs/images/01-dashboard.png)
 
-![应用构建器 - 可视化页面编辑器](docs/images/02-app-builder.png)
-
 ![应用管理 - 应用列表与管理](docs/images/03-app-management.png)
+
+![应用预览 - 生成结果实时预览](docs/images/04-app-preview.png)
+
+![应用详情 - 项目详情与配置](docs/images/05-app-detail.png)
 
 技术上做了几件有意思的事：
 
