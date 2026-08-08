@@ -80,6 +80,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
     @Resource
     private AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
 
+    @Resource
+    private com.xiaolou.xiaolouainocodebackend.manager.CosManager cosManager;
+
     @Override
     public Long createApp(AppAddRequest appAddRequest, User loginUser) {
         // 参数校验
@@ -279,12 +282,23 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
             sourceDir = distDir;
             log.info("Vue 项目构建成功，将部署 dist 目录: {}", distDir.getAbsolutePath());
         }
-        // 8. 复制文件到部署目录
-        String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;
-        try {
-            FileUtil.copyContent(sourceDir, new File(deployDirPath), true);
-        } catch (Exception e) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "部署失败：" + e.getMessage());
+        // 8. 部署：优先上传到 COS（公有读），未配置 COS 时回退本地盘
+        String appDeployUrl;
+        if (cosManager != null) {
+            String cosPrefix = AppConstant.CODE_DEPLOY_COS_PREFIX + "/" + deployKey;
+            int uploaded = cosManager.uploadDir(cosPrefix, sourceDir);
+            ThrowUtils.throwIf(uploaded <= 0, ErrorCode.SYSTEM_ERROR, "部署失败：上传 COS 文件数为 0");
+            appDeployUrl = cosManager.buildPublicUrl(cosPrefix + "/index.html");
+            log.info("应用部署到COS成功: appId={}, prefix={}, url={}", appId, cosPrefix, appDeployUrl);
+        } else {
+            String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;
+            try {
+                FileUtil.copyContent(sourceDir, new File(deployDirPath), true);
+            } catch (Exception e) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "部署失败：" + e.getMessage());
+            }
+            appDeployUrl = String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
+            log.warn("COS未配置，应用部署回退本地盘: appId={}, url={}", appId, appDeployUrl);
         }
         // 9. 更新应用的 deployKey 和部署时间
         App updateApp = new App();
@@ -293,8 +307,7 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         updateApp.setDeployedTime(LocalDateTime.now());
         boolean updateResult = this.updateById(updateApp);
         ThrowUtils.throwIf(!updateResult, ErrorCode.OPERATION_ERROR, "更新应用部署信息失败");
-        // 10. 返回可访问的 URL
-        String appDeployUrl = String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
+        // 10. 异步生成截图并更新封面
         generateAppScreenshotAsync(appId, appDeployUrl);
         return appDeployUrl;
     }
@@ -336,6 +349,22 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         long appId = Long.parseLong(id.toString());
         if (appId <= 0) {
             return false;
+        }
+        // 查询应用，清理 COS 上的部署产物与源码
+        try {
+            App app = this.getById(appId);
+            if (app != null && cosManager != null) {
+                String deployKey = app.getDeployKey();
+                if (StrUtil.isNotBlank(deployKey)) {
+                    cosManager.deleteDir(AppConstant.CODE_DEPLOY_COS_PREFIX + "/" + deployKey);
+                }
+                if (StrUtil.isNotBlank(app.getCodeGenType())) {
+                    String sourcePrefix = app.getCodeGenType() + "_" + appId;
+                    cosManager.deleteDir(AppConstant.CODE_SOURCE_COS_PREFIX + "/" + sourcePrefix);
+                }
+            }
+        } catch (Exception e) {
+            log.error("删除应用关联的COS资源失败: appId={}, {}", appId, e.getMessage());
         }
         // 先删除关联的对话历史
         try {
