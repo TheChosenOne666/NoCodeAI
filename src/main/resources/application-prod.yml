@@ -10,9 +10,8 @@ server:
     session:
       cookie:
         max-age: 2592000
-        # 跨站场景（前端 xiaolou-nocode.pages.dev，后端 railway.app）必须 None + Secure
-        # 否则 Chrome/Edge 会拦截第三方 Cookie，导致前端"登录成功但实际未登录"
-        same-site: none
+        # Spring Boot 3.x 的 server.servlet.session.cookie.same-site 配置无效，
+        # SameSite 必须通过 SessionConfig#cookieSerializer (DefaultCookieSerializer.setSameSite) 设置
         secure: true
 
 spring:
