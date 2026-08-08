@@ -46,6 +46,10 @@ public class ImageGeneratorTool extends BaseTool {
 
     @PostConstruct
     public void init() {
+        if (StrUtil.isBlank(volcengineApiKey)) {
+            log.warn("ImageGeneratorTool 未配置 ai.api-key，文生图功能将不可用");
+            return;
+        }
         ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
         Dispatcher dispatcher = new Dispatcher();
         this.arkService = ArkService.builder()
@@ -68,7 +72,12 @@ public class ImageGeneratorTool extends BaseTool {
     public String generateContentImages(@P("图片描述，详细说明需要的图片内容、风格、场景等，尽量详细") String description,
                                         @ToolMemoryId Long appId) {
         List<Map<String, String>> imageList = new ArrayList<>();
-        
+
+        if (arkService == null) {
+            log.warn("ImageGeneratorTool 未初始化（ai.api-key 缺失），跳过生成");
+            return JSONUtil.toJsonStr(imageList);
+        }
+
         try {
             String imagePrompt = String.format("生成高质量图片，%s", description);
 

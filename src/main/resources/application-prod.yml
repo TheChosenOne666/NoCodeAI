@@ -36,21 +36,21 @@ langchain4j:
     chat-model:
       base-url: https://ark.cn-beijing.volces.com/api/v3
       api-key: ${VOLC_API_KEY:}
-      model-name: ${CHAT_MODEL:deepseek-v3-2-251201}
+      model-name: ${CHAT_MODEL:deepseek-v4-flash-ga-260731}
       log-requests: true
       log-responses: true
       max-retries: 3
     streaming-chat-model:
       base-url: https://ark.cn-beijing.volces.com/api/v3
       api-key: ${VOLC_API_KEY:}
-      model-name: ${CHAT_MODEL:deepseek-v3-2-251201}
+      model-name: ${CHAT_MODEL:deepseek-v4-flash-ga-260731}
       log-requests: true
       log-responses: true
       max-retries: 3
     reasoning-streaming-chat-model:
       base-url: https://ark.cn-beijing.volces.com/api/v3
       api-key: ${VOLC_API_KEY:}
-      model-name: ${CHAT_MODEL:deepseek-v3-2-251201}
+      model-name: ${CHAT_MODEL:deepseek-v4-flash-ga-260731}
       temperature: 0.1
       log-requests: true
       log-responses: true
@@ -80,3 +80,6 @@ pexels:
 ai:
   api-key: ${VOLC_IMAGE_API_KEY:}
   image-model: ${IMAGE_MODEL:doubao-seedream-5-0-260128}
+
+# 语言模型默认名（deepseek-v4-flash-ga-260731）
+CHAT_MODEL: deepseek-v4-flash-ga-260731

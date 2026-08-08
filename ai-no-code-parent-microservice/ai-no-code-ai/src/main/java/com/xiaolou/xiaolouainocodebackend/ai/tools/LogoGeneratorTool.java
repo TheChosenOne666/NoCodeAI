@@ -47,6 +47,10 @@ public class LogoGeneratorTool extends BaseTool {
 
     @PostConstruct
     public void init() {
+        if (StrUtil.isBlank(volcengineApiKey)) {
+            log.warn("LogoGeneratorTool 未配置 ai.api-key，文生图功能将不可用");
+            return;
+        }
         ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
         Dispatcher dispatcher = new Dispatcher();
         this.arkService = ArkService.builder()
@@ -69,7 +73,12 @@ public class LogoGeneratorTool extends BaseTool {
     public String generateLogos(@P("Logo 设计描述，包括名称、行业、风格等，尽量详细") String description,
                                 @ToolMemoryId Long appId) {
         List<Map<String, String>> logoList = new ArrayList<>();
-        
+
+        if (arkService == null) {
+            log.warn("LogoGeneratorTool 未初始化（ai.api-key 缺失），跳过生成");
+            return JSONUtil.toJsonStr(logoList);
+        }
+
         try {
             String logoPrompt = String.format("生成 Logo，Logo 中禁止包含任何文字！Logo 介绍：%s", description);
 
