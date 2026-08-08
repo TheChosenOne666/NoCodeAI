@@ -35,13 +35,35 @@ public class LogoGeneratorTool {
 
     @PostConstruct
     public void init() {
-        ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
-        Dispatcher dispatcher = new Dispatcher();
-        this.arkService = ArkService.builder()
-                .dispatcher(dispatcher)
-                .connectionPool(connectionPool)
-                .apiKey(volcengineApiKey)
-                .build();
+        // 诊断日志（只显示 ENV 长度 + key 长度/前 8 字符，不暴露完整密钥）
+        String envValue = System.getenv("VOLC_IMAGE_API_KEY");
+        String envDisplay = envValue == null ? "null" : "len=" + envValue.length();
+        if (volcengineApiKey == null) {
+            log.warn("LogoGeneratorTool: ai.api-key 环境变量未注入. ENV VOLC_IMAGE_API_KEY={}", envDisplay);
+        } else if (volcengineApiKey.isEmpty()) {
+            log.warn("LogoGeneratorTool: ai.api-key 是空字符串. ENV VOLC_IMAGE_API_KEY={}", envDisplay);
+        } else {
+            log.info("LogoGeneratorTool: ai.api-key 已注入 (len={}, head={}...)", volcengineApiKey.length(),
+                    volcengineApiKey.length() > 8 ? volcengineApiKey.substring(0, 8) : volcengineApiKey);
+        }
+
+        if (StrUtil.isBlank(volcengineApiKey)) {
+            log.warn("LogoGeneratorTool 未配置 ai.api-key，文生图功能将不可用");
+            return;
+        }
+        try {
+            ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
+            Dispatcher dispatcher = new Dispatcher();
+            this.arkService = ArkService.builder()
+                    .dispatcher(dispatcher)
+                    .connectionPool(connectionPool)
+                    .apiKey(volcengineApiKey)
+                    .build();
+            log.info("LogoGeneratorTool 初始化完成");
+        } catch (Exception e) {
+            log.error("LogoGeneratorTool ArkService 创建失败，文生图功能将不可用: {}", e.getMessage(), e);
+            this.arkService = null;
+        }
     }
 
     @PreDestroy
@@ -54,6 +76,10 @@ public class LogoGeneratorTool {
     @Tool("根据描述生成 Logo 设计图片，用于网站品牌标识")
     public List<ImageResource> generateLogos(@P("Logo 设计描述，如名称、行业、风格等，尽量详细") String description) {
         List<ImageResource> logoList = new ArrayList<>();
+        if (arkService == null) {
+            log.warn("LogoGeneratorTool 未初始化（ai.api-key 缺失或 ArkService 创建失败），跳过生成");
+            return logoList;
+        }
         try {
             // 构建 Logo 设计提示词
             String logoPrompt = String.format("生成 Logo，Logo 中禁止包含任何文字！Logo 介绍：%s", description);
