@@ -1,0 +1,82 @@
+server:
+  # Railway 注入 $PORT，本地回退 8123
+  port: ${PORT:8123}
+  servlet:
+    context-path: /api
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+    session:
+      cookie:
+        max-age: 2592000
+
+spring:
+  # 生产环境数据源（Railway MySQL 插件注入）
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://${MYSQLHOST:localhost}:${MYSQLPORT:3306}/${MYSQLDATABASE:nocode}
+    username: ${MYSQLUSER:root}
+    password: ${MYSQLPASSWORD:123456}
+  # 生产环境 Redis（Railway Redis 插件注入）
+  data:
+    redis:
+      host: ${REDISHOST:localhost}
+      port: ${REDISPORT:6379}
+      password: ${REDISPASSWORD:}
+      database: 0
+      ttl: 3600
+  session:
+    store-type: redis
+    timeout: 2592000
+
+# AI 模型配置（密钥全部走环境变量，不进仓库）
+langchain4j:
+  open-ai:
+    chat-model:
+      base-url: https://ark.cn-beijing.volces.com/api/v3
+      api-key: ${VOLC_API_KEY:}
+      model-name: ${CHAT_MODEL:deepseek-v3-2-251201}
+      log-requests: true
+      log-responses: true
+      max-retries: 3
+    streaming-chat-model:
+      base-url: https://ark.cn-beijing.volces.com/api/v3
+      api-key: ${VOLC_API_KEY:}
+      model-name: ${CHAT_MODEL:deepseek-v3-2-251201}
+      log-requests: true
+      log-responses: true
+      max-retries: 3
+    reasoning-streaming-chat-model:
+      base-url: https://ark.cn-beijing.volces.com/api/v3
+      api-key: ${VOLC_API_KEY:}
+      model-name: ${CHAT_MODEL:deepseek-v3-2-251201}
+      temperature: 0.1
+      log-requests: true
+      log-responses: true
+      max-retries: 3
+    routing-chat-model:
+      base-url: https://ark.cn-beijing.volces.com/api/v3
+      api-key: ${VOLC_ROUTING_API_KEY:}
+      model-name: ${ROUTING_MODEL:doubao-seed-2-0-lite-260428}
+      max-tokens: 100
+      log-requests: true
+      log-responses: true
+
+# 对象存储（腾讯云 COS，密钥走环境变量）
+cos:
+  client:
+    accessKey: ${COS_ACCESS_KEY:}
+    secretKey: ${COS_SECRET_KEY:}
+    region: ${COS_REGION:ap-shanghai}
+    bucket: ${COS_BUCKET:}
+    host: ${COS_HOST:}
+
+# Pexels 图片搜索配置
+pexels:
+  api-key: ${PEXELS_API_KEY:}
+
+# 火山引擎文生图模型配置
+ai:
+  api-key: ${VOLC_IMAGE_API_KEY:}
+  image-model: ${IMAGE_MODEL:doubao-seedream-5-0-260128}
