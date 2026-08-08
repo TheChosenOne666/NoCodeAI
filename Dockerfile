@@ -4,7 +4,7 @@ WORKDIR /app
 
 # 先单独下载依赖以利用 Docker 缓存
 COPY pom.xml ./
-COPY .mvn .mvn 2>/dev/null || true
+COPY .mvn .mvn
 COPY mvnw mvnw.cmd ./
 RUN chmod +x mvnw && ./mvnw -B dependency:go-offline -DskipTests || true
 
