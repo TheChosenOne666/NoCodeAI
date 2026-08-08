@@ -78,6 +78,7 @@ getDeployUrl(deployKey) =
 - 一次性迁移 `CosDeployMigrationRunner` 已将本地 `tmp/code_deploy/*` 全部上传 COS（27 个 deployKey、144 文件），生产 COS 桶 `xiaolou-bi-1382226492` 公有读。
 - 联调验证（2026-08-09）：`https://xiaolou-bi-1382226492.cos.ap-shanghai.myqcloud.com/code-deploy/jkJ12P/index.html` 返回 `200 / text/html / 449B`。
 - Cloudflare Pages（前端）部署项目 `xiaolou-nocode`，生产域名 `https://xiaolou-nocode.pages.dev`。
+- **COS 直链必须精确到 `index.html`**（2026-08-09 修正）：COS 是对象存储、不是静态网站服务，访问 `.../code-deploy/{deployKey}/`（目录）会返回 `NoSuchKey`（404 XML）。前端 `getDeployUrl` 的 COS 分支已改为拼 `.../code-deploy/{deployKey}/index.html`（验证 200）；后端 `StaticResourceController` 回退分支由 Spring 欢迎页自动补 `index.html`，无需改动。
 
 ### 9. 调试检查清单（精品案例 404 排查）
 1. 浏览器 DevTools → Network → 点击"查看作品"，看实际请求 URL 是 COS 直链还是 Railway `/api/static/...`。

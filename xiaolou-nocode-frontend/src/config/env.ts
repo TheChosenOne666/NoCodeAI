@@ -17,10 +17,11 @@ export const STATIC_BASE_URL = `${API_BASE_URL}/static`
 export const COS_DEPLOY_HOST = import.meta.env.VITE_COS_DEPLOY_HOST || ''
 
 // 获取部署应用的完整URL
-// 已配置 COS 公有域名时直接返回 COS 直链；否则回退后端 StaticResourceController 托管
+// 已配置 COS 公有域名时直接返回 COS 直链（COS 非静态网站服务，需精确补 index.html）；
+// 否则回退后端 StaticResourceController 托管（该控制器会自动补 index.html）
 export const getDeployUrl = (deployKey: string) => {
   if (COS_DEPLOY_HOST) {
-    return `${COS_DEPLOY_HOST.replace(/\/$/, '')}/code-deploy/${deployKey}/`
+    return `${COS_DEPLOY_HOST.replace(/\/$/, '')}/code-deploy/${deployKey}/index.html`
   }
   return `${STATIC_BASE_URL}/${deployKey}/`
 }
