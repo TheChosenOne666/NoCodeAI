@@ -51,14 +51,19 @@ public class LogoGeneratorTool extends BaseTool {
             log.warn("LogoGeneratorTool 未配置 ai.api-key，文生图功能将不可用");
             return;
         }
-        ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
-        Dispatcher dispatcher = new Dispatcher();
-        this.arkService = ArkService.builder()
-                .dispatcher(dispatcher)
-                .connectionPool(connectionPool)
-                .apiKey(volcengineApiKey)
-                .build();
-        log.info("LogoGeneratorTool 初始化完成");
+        try {
+            ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
+            Dispatcher dispatcher = new Dispatcher();
+            this.arkService = ArkService.builder()
+                    .dispatcher(dispatcher)
+                    .connectionPool(connectionPool)
+                    .apiKey(volcengineApiKey)
+                    .build();
+            log.info("LogoGeneratorTool 初始化完成");
+        } catch (Exception e) {
+            log.error("LogoGeneratorTool ArkService 创建失败，文生图功能将不可用: {}", e.getMessage(), e);
+            this.arkService = null;
+        }
     }
 
     @PreDestroy

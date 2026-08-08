@@ -50,14 +50,19 @@ public class ImageGeneratorTool extends BaseTool {
             log.warn("ImageGeneratorTool 未配置 ai.api-key，文生图功能将不可用");
             return;
         }
-        ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
-        Dispatcher dispatcher = new Dispatcher();
-        this.arkService = ArkService.builder()
-                .dispatcher(dispatcher)
-                .connectionPool(connectionPool)
-                .apiKey(volcengineApiKey)
-                .build();
-        log.info("ImageGeneratorTool 初始化完成");
+        try {
+            ConnectionPool connectionPool = new ConnectionPool(5, 1, TimeUnit.SECONDS);
+            Dispatcher dispatcher = new Dispatcher();
+            this.arkService = ArkService.builder()
+                    .dispatcher(dispatcher)
+                    .connectionPool(connectionPool)
+                    .apiKey(volcengineApiKey)
+                    .build();
+            log.info("ImageGeneratorTool 初始化完成");
+        } catch (Exception e) {
+            log.error("ImageGeneratorTool ArkService 创建失败，文生图功能将不可用: {}", e.getMessage(), e);
+            this.arkService = null;
+        }
     }
 
     @PreDestroy
