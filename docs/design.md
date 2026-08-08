@@ -70,6 +70,20 @@ getDeployUrl(deployKey) =
 - 前端 `getDeployUrl` 行为变更：配置了 `VITE_COS_DEPLOY_HOST` 后，预览地址从 `/api/static/{deployKey}/` 变为 COS 直链。
 - 删除应用会同步删 COS 资源（不可恢复），删除前需确认。
 
+### 8. 生产环境部署要点（2026-08-09 实测）
+- **前端 `.env.production` 必须配 `VITE_COS_DEPLOY_HOST=https://xiaolou-bi-1382226492.cos.ap-shanghai.myqcloud.com`**。
+  - 未配时 `getDeployUrl` 回退到 `API_BASE_URL/static/{deployKey}/`，对应 Railway 后端 `StaticResourceController`。
+  - Railway 容器**无持久化目录**（`tmp/code_deploy` 不存在），回退路径**必定 404**。精品案例"查看作品"上线前一直就是这个原因。
+- 后端 `cos.client.*` 配置已通过 Railway 环境变量注入（变量名 `COS_ACCESS_KEY` / `COS_SECRET_KEY` / `COS_REGION` / `COS_BUCKET` / `COS_HOST`，由 prod profile `${COS_*}` 占位符消费）。
+- 一次性迁移 `CosDeployMigrationRunner` 已将本地 `tmp/code_deploy/*` 全部上传 COS（27 个 deployKey、144 文件），生产 COS 桶 `xiaolou-bi-1382226492` 公有读。
+- 联调验证（2026-08-09）：`https://xiaolou-bi-1382226492.cos.ap-shanghai.myqcloud.com/code-deploy/jkJ12P/index.html` 返回 `200 / text/html / 449B`。
+- Cloudflare Pages（前端）部署项目 `xiaolou-nocode`，生产域名 `https://xiaolou-nocode.pages.dev`。
+
+### 9. 调试检查清单（精品案例 404 排查）
+1. 浏览器 DevTools → Network → 点击"查看作品"，看实际请求 URL 是 COS 直链还是 Railway `/api/static/...`。
+2. 若跳到 Railway `/api/static/...`：前端 `.env.production` 缺 `VITE_COS_DEPLOY_HOST` 或 Cloudflare Pages 未用最新 dist 重新部署。
+3. 若跳到 COS 但返回 404/403：COS 桶对象缺失（迁移未跑 / 上传失败）或 bucket 权限非公有读。
+
 ## 站点流量统计（友盟+ U-Web，仅平台前端）
 
 ### 范围
