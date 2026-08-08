@@ -21,6 +21,8 @@ import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.DigestUtils;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -42,14 +44,40 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
      */
     public static final String SALT = "xiaolou";
 
+    /**
+     * 默认头像：积木卡通人物（内联 SVG data URI）
+     * 使用内联 SVG 而非外部 CDN/COS，避免 COS 过期或跨域导致头像裂图。
+     */
+    public static final String DEFAULT_AVATAR;
+
+    static {
+        String svg = "<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96' viewBox='0 0 96 96'>"
+                + "<rect width='96' height='96' rx='16' fill='#EEF2FF'/>"
+                + "<rect x='30' y='24' width='36' height='20' rx='4' fill='#F59E0B'/>"
+                + "<rect x='34' y='44' width='28' height='28' rx='4' fill='#6366F1'/>"
+                + "<circle cx='43' cy='58' r='4' fill='#FFFFFF'/>"
+                + "<circle cx='55' cy='58' r='4' fill='#FFFFFF'/>"
+                + "<rect x='42' y='66' width='12' height='4' rx='2' fill='#312E81'/>"
+                + "</svg>";
+        DEFAULT_AVATAR = "data:image/svg+xml;utf8,"
+                + URLEncoder.encode(svg, StandardCharsets.UTF_8).replace("+", "%20");
+    }
+
     @Override
-    public long userRegister(String userAccount, String userPassword, String checkPassword) {
+    public long userRegister(String userAccount, String userPassword, String checkPassword, String userName) {
         // 1. 校验
         if (StringUtils.isAnyBlank(userAccount, userPassword, checkPassword)) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "参数为空");
         }
         if (userAccount.length() < 4) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户账号过短");
+        }
+        // 用户名可选：未填写时默认用账号作为昵称
+        if (StringUtils.isBlank(userName)) {
+            userName = userAccount;
+        }
+        if (userName.length() > 20) {
+            throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户名过长");
         }
         if (userPassword.length() < 8 || checkPassword.length() < 8) {
             throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户密码过短");
@@ -66,12 +94,21 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             if (count > 0) {
                 throw new BusinessException(ErrorCode.PARAMS_ERROR, "账号重复");
             }
+            // 用户名不能重复
+            QueryWrapper<User> nameWrapper = new QueryWrapper<>();
+            nameWrapper.eq("userName", userName);
+            if (this.baseMapper.selectCount(nameWrapper) > 0) {
+                throw new BusinessException(ErrorCode.PARAMS_ERROR, "用户名已存在");
+            }
             // 2. 加密
             String encryptPassword = DigestUtils.md5DigestAsHex((SALT + userPassword).getBytes());
             // 3. 插入数据
             User user = new User();
             user.setUserAccount(userAccount);
             user.setUserPassword(encryptPassword);
+            user.setUserName(userName);
+            // 默认头像：积木卡通人物（内联 SVG data URI，不依赖外部 CDN/COS）
+            user.setUserAvatar(DEFAULT_AVATAR);
             boolean saveResult = this.save(user);
             if (!saveResult) {
                 throw new BusinessException(ErrorCode.SYSTEM_ERROR, "注册失败，数据库错误");

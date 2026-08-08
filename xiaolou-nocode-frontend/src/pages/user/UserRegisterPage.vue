@@ -51,7 +51,10 @@
       <h2 class="title">创建账号</h2>
       <div class="desc">加入 No Code，零代码实现天马行空的想法</div>
       <a-form :model="formState" name="basic" autocomplete="off" @finish="handleSubmit">
-        <a-form-item name="userAccount" :rules="[{ required: true, message: '请输入账号' }]">
+        <a-form-item name="userName" :rules="[{ required: true, message: '请输入用户名' }, { max: 20, message: '用户名不能超过 20 位' }]">
+          <a-input v-model:value="formState.userName" placeholder="创建你的用户名" size="large" autocomplete="off" />
+        </a-form-item>
+        <a-form-item name="userAccount" :rules="[{ required: true, message: '请输入账号' }, { min: 4, message: '账号不能小于 4 位' }]">
           <a-input v-model:value="formState.userAccount" placeholder="请输入账号" size="large" autocomplete="off" />
         </a-form-item>
         <a-form-item
@@ -97,6 +100,7 @@ import loginBg from '@/assets/login-bg.png'
 const router = useRouter()
 
 const formState = reactive<API.UserRegisterRequest>({
+  userName: '',
   userAccount: '',
   userPassword: '',
   checkPassword: '',
