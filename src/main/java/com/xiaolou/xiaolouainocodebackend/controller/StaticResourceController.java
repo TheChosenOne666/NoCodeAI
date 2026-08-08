@@ -16,8 +16,8 @@ import java.io.File;
 @RequestMapping("/static")
 public class StaticResourceController {
 
-    // 应用生成根目录（用于浏览）
-    private static final String PREVIEW_ROOT_DIR = AppConstant.CODE_OUTPUT_ROOT_DIR;
+    // 应用部署根目录（与 AppServiceImpl.deploy 写入的 CODE_DEPLOY_ROOT_DIR 一致）
+    private static final String PREVIEW_ROOT_DIR = AppConstant.CODE_DEPLOY_ROOT_DIR;
 
     /**
      * 提供静态资源访问，支持目录重定向

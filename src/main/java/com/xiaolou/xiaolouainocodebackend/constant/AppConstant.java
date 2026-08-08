@@ -23,8 +23,12 @@ public interface AppConstant {
     String CODE_DEPLOY_ROOT_DIR = System.getProperty("user.dir") + "/tmp/code_deploy";
 
     /**
-     * 应用部署域名
+     * 应用部署域名（对外访问前缀）
+     * 优先取环境变量 CODE_DEPLOY_HOST（Railway 可设为 https://<railway域名>/api），
+     * 本地未配置时回退到 http://localhost:8123/api
      */
-    String CODE_DEPLOY_HOST = "http://localhost";
+    String CODE_DEPLOY_HOST = System.getenv("CODE_DEPLOY_HOST") != null
+            ? System.getenv("CODE_DEPLOY_HOST")
+            : "http://localhost:8123/api";
 
 }

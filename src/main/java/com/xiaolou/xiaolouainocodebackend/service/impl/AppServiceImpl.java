@@ -282,8 +282,8 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         updateApp.setDeployedTime(LocalDateTime.now());
         boolean updateResult = this.updateById(updateApp);
         ThrowUtils.throwIf(!updateResult, ErrorCode.OPERATION_ERROR, "更新应用部署信息失败");
-        // 10. 返回可访问的 URL
-        String appDeployUrl = String.format("%s/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
+        // 10. 返回可访问的 URL（与 StaticResourceController 路由 /api/static/{deployKey}/ 对齐）
+        String appDeployUrl = String.format("%s/static/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
         generateAppScreenshotAsync(appId, appDeployUrl);
         return appDeployUrl;
     }
