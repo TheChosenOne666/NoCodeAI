@@ -47,6 +47,17 @@ public class LogoGeneratorTool extends BaseTool {
 
     @PostConstruct
     public void init() {
+        // 诊断日志（仅显示长度与前 8 字符，不暴露完整 key）
+        if (volcengineApiKey == null) {
+            log.warn("LogoGeneratorTool: ai.api-key 环境变量未注入 (volcengineApiKey=null), 文生图功能将不可用. ENV VOLC_IMAGE_API_KEY={}",
+                    System.getenv("VOLC_IMAGE_API_KEY") == null ? "null" : "len=" + System.getenv("VOLC_IMAGE_API_KEY").length());
+        } else if (volcengineApiKey.isEmpty()) {
+            log.warn("LogoGeneratorTool: ai.api-key 是空字符串. ENV VOLC_IMAGE_API_KEY={}",
+                    System.getenv("VOLC_IMAGE_API_KEY") == null ? "null" : "len=" + System.getenv("VOLC_IMAGE_API_KEY").length());
+        } else {
+            log.info("LogoGeneratorTool: ai.api-key 已注入 (len={}, head={}...)", volcengineApiKey.length(),
+                    volcengineApiKey.length() > 8 ? volcengineApiKey.substring(0, 8) : volcengineApiKey);
+        }
         if (StrUtil.isBlank(volcengineApiKey)) {
             log.warn("LogoGeneratorTool 未配置 ai.api-key，文生图功能将不可用");
             return;

@@ -1,5 +1,5 @@
 # Railway 部署：用 Dockerfile 显式装 JDK 21 + Maven，绕开 Nixpacks 自动探测不可控问题
-# cache-bust: 2026-08-08-3 强制 Railway 完全重建并清除所有旧 startCommand 缓存
+# cache-bust: 2026-08-08-4 强制 Railway 完全重建并清除所有旧 startCommand 与 .class 缓存
 FROM maven:3.9-eclipse-temurin-21 AS builder
 WORKDIR /app
 
@@ -8,6 +8,9 @@ COPY pom.xml ./
 COPY .mvn .mvn
 COPY mvnw mvnw.cmd ./
 RUN chmod +x mvnw && ./mvnw -B dependency:go-offline -DskipTests || true
+
+# 强制清理 target 目录，避免 Docker layer 缓存的旧 .class 干扰新打包
+RUN rm -rf /app/target
 
 # 复制源码并打包
 COPY src ./src

@@ -46,6 +46,16 @@ public class ImageGeneratorTool extends BaseTool {
 
     @PostConstruct
     public void init() {
+        if (volcengineApiKey == null) {
+            log.warn("ImageGeneratorTool: ai.api-key 环境变量未注入, 文生图功能将不可用. ENV VOLC_IMAGE_API_KEY={}",
+                    System.getenv("VOLC_IMAGE_API_KEY") == null ? "null" : "len=" + System.getenv("VOLC_IMAGE_API_KEY").length());
+        } else if (volcengineApiKey.isEmpty()) {
+            log.warn("ImageGeneratorTool: ai.api-key 是空字符串. ENV VOLC_IMAGE_API_KEY={}",
+                    System.getenv("VOLC_IMAGE_API_KEY") == null ? "null" : "len=" + System.getenv("VOLC_IMAGE_API_KEY").length());
+        } else {
+            log.info("ImageGeneratorTool: ai.api-key 已注入 (len={}, head={}...)", volcengineApiKey.length(),
+                    volcengineApiKey.length() > 8 ? volcengineApiKey.substring(0, 8) : volcengineApiKey);
+        }
         if (StrUtil.isBlank(volcengineApiKey)) {
             log.warn("ImageGeneratorTool 未配置 ai.api-key，文生图功能将不可用");
             return;
