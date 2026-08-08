@@ -1,5 +1,10 @@
 <template>
   <div id="userRegisterPage">
+    <!-- 左上角品牌标识 -->
+    <RouterLink to="/" class="brand-logo">
+      <img class="brand-logo-img" src="@/assets/logo.png" alt="Logo" />
+      <span class="brand-logo-text">No Code零代码</span>
+    </RouterLink>
     <!-- 全屏背景图 -->
     <img class="login-bg" :src="loginBg" alt="" />
     <!-- 鼠标跟随 + 斜向流光层 -->
@@ -512,6 +517,31 @@ onUnmounted(() => {
   text-align: center;
   font-size: 13px;
   color: rgba(100, 116, 139, 0.8);
+  letter-spacing: 0.5px;
+}
+
+.brand-logo {
+  position: absolute;
+  top: 24px;
+  left: 32px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.brand-logo-img {
+  width: 36px;
+  height: 36px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.brand-logo-text {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
   letter-spacing: 0.5px;
 }
 
