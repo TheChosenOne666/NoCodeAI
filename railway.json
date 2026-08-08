@@ -5,7 +5,6 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
-    "startCommand": "java -jar target/xiaolou-nocode-backend-0.0.1-SNAPSHOT.jar",
     "healthcheckPath": "/api/doc.html",
     "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",
