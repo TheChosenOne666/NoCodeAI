@@ -13,8 +13,10 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localho
 export const STATIC_BASE_URL = `${API_BASE_URL}/static`
 
 // 获取部署应用的完整URL
+// 用户部署的作品由后端 StaticResourceController (GET /api/static/{deployKey}/) 托管，
+// 必须走 API_BASE_URL，不能用 Cloudflare Pages 域名（Cloudflare 没有这些 deployKey 路由，会白屏）
 export const getDeployUrl = (deployKey: string) => {
-  return `${DEPLOY_DOMAIN}/${deployKey}`
+  return `${STATIC_BASE_URL}/${deployKey}/`
 }
 
 // 获取静态资源预览URL
