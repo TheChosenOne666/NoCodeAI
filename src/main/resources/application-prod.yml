@@ -10,6 +10,10 @@ server:
     session:
       cookie:
         max-age: 2592000
+        # 跨站场景（前端 xiaolou-nocode.pages.dev，后端 railway.app）必须 None + Secure
+        # 否则 Chrome/Edge 会拦截第三方 Cookie，导致前端"登录成功但实际未登录"
+        same-site: none
+        secure: true
 
 spring:
   # 生产环境数据源（Railway MySQL 插件注入）

@@ -35,6 +35,8 @@ server:
     session:
       cookie:
         max-age: 2592000
+        # 本地前后端同源 http 时不能用 Secure，否则浏览器直接丢弃 Cookie
+        same-site: lax
 
 
 # springdoc-openapi
