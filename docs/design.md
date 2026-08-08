@@ -4,7 +4,8 @@
 
 ### 1. 架构决策
 - **源码/产物存对象存储**：腾讯云 COS（公有读），而非本地临时盘或 PostgreSQL BLOB。
-- **前端直接引 COS 直链**：`{COS_DEPLOY_HOST}/code-deploy/{deployKey}/index.html`，不经 Java 代理，支持全屏、可被他人访问。
+- **前端直接引 COS 静态网站直链**：`{COS_DEPLOY_HOST}/code-deploy/{deployKey}/`，其中 `COS_DEPLOY_HOST` 必须是 **cos-website 域名**（`*.cos-website.ap-shanghai.myqcloud.com`），不经 Java 代理，支持全屏、可被他人访问。
+- **为何用 cos-website 而非默认域名**：腾讯云 2024-01 后新建桶的默认域名（`*.cos.ap-shanghai.myqcloud.com`）强制返回 `Content-Disposition: attachment` + `x-cos-force-download: true`，浏览器会下载而非展示（且无备案域名无法关闭该策略）。cos-website 静态网站域名不带强制下载头，且会自动补 `index.html`，是免备案的展示方案。
 - **回退策略**：COS 未配置时（`cosManager == null`，条件 bean 不创建）回退本地盘，保证本地开发与异常环境可运行。
 
 ### 2. COS 对象键约定
@@ -44,9 +45,9 @@
 ### 4. 前端预览 URL
 `env.ts`：
 ```
-COS_DEPLOY_HOST = import.meta.env.VITE_COS_DEPLOY_HOST
+COS_DEPLOY_HOST = import.meta.env.VITE_COS_DEPLOY_HOST   // 必须是 cos-website 域名
 getDeployUrl(deployKey) =
-  COS_DEPLOY_HOST ? `${COS_DEPLOY_HOST}/code-deploy/${deployKey}/`
+  COS_DEPLOY_HOST ? `${COS_DEPLOY_HOST}/code-deploy/${deployKey}/`   // 静态网站自动补 index.html
                   : `${API_BASE_URL}/static/${deployKey}/`
 ```
 实时预览（生成中）仍走 `/api/static`（getStaticPreviewUrl），不变。
@@ -71,19 +72,21 @@ getDeployUrl(deployKey) =
 - 删除应用会同步删 COS 资源（不可恢复），删除前需确认。
 
 ### 8. 生产环境部署要点（2026-08-09 实测）
-- **前端 `.env.production` 必须配 `VITE_COS_DEPLOY_HOST=https://xiaolou-bi-1382226492.cos.ap-shanghai.myqcloud.com`**。
+- **前端 `.env.production` 必须配 `VITE_COS_DEPLOY_HOST=https://xiaolou-bi-1382226492.cos-website.ap-shanghai.myqcloud.com`**（cos-website 静态网站域名）。
   - 未配时 `getDeployUrl` 回退到 `API_BASE_URL/static/{deployKey}/`，对应 Railway 后端 `StaticResourceController`。
   - Railway 容器**无持久化目录**（`tmp/code_deploy` 不存在），回退路径**必定 404**。精品案例"查看作品"上线前一直就是这个原因。
+- **切换 cos-website 的原因**（2026-08-09）：COS 默认域名（`*.cos.ap-shanghai.myqcloud.com`）对 2024-01 后新桶强制返回 `Content-Disposition: attachment` + `x-cos-force-download: true`，浏览器会下载而非展示，且无备案域名无法关闭该策略。改用 cos-website 静态网站域名后：① 不带强制下载头，浏览器直接展示；② 静态网站服务自动补 `index.html`，访问目录 URL 即可。
+- **前置条件**：必须在 COS 控制台为桶 `xiaolou-bi-1382226492` 开启「静态网站」功能（索引文档填 `index.html`、错误文档填 `index.html`），否则 cos-website 域名返回 `NoSuchWebsiteConfiguration`（404）。
 - 后端 `cos.client.*` 配置已通过 Railway 环境变量注入（变量名 `COS_ACCESS_KEY` / `COS_SECRET_KEY` / `COS_REGION` / `COS_BUCKET` / `COS_HOST`，由 prod profile `${COS_*}` 占位符消费）。
 - 一次性迁移 `CosDeployMigrationRunner` 已将本地 `tmp/code_deploy/*` 全部上传 COS（27 个 deployKey、144 文件），生产 COS 桶 `xiaolou-bi-1382226492` 公有读。
-- 联调验证（2026-08-09）：`https://xiaolou-bi-1382226492.cos.ap-shanghai.myqcloud.com/code-deploy/jkJ12P/index.html` 返回 `200 / text/html / 449B`。
 - Cloudflare Pages（前端）部署项目 `xiaolou-nocode`，生产域名 `https://xiaolou-nocode.pages.dev`。
-- **COS 直链必须精确到 `index.html`**（2026-08-09 修正）：COS 是对象存储、不是静态网站服务，访问 `.../code-deploy/{deployKey}/`（目录）会返回 `NoSuchKey`（404 XML）。前端 `getDeployUrl` 的 COS 分支已改为拼 `.../code-deploy/{deployKey}/index.html`（验证 200）；后端 `StaticResourceController` 回退分支由 Spring 欢迎页自动补 `index.html`，无需改动。
+- 联调验证（2026-08-09）：开启静态网站后 `https://xiaolou-bi-1382226492.cos-website.ap-shanghai.myqcloud.com/code-deploy/jkJ12P/` 应返回 `200 / text/html`（由静态网站自动补 index.html）。
 
-### 9. 调试检查清单（精品案例 404 排查）
-1. 浏览器 DevTools → Network → 点击"查看作品"，看实际请求 URL 是 COS 直链还是 Railway `/api/static/...`。
+### 9. 调试检查清单（精品案例查看作品排查）
+1. 浏览器 DevTools → Network → 点击"查看作品"，看实际请求 URL 是 cos-website 直链还是 Railway `/api/static/...`。
 2. 若跳到 Railway `/api/static/...`：前端 `.env.production` 缺 `VITE_COS_DEPLOY_HOST` 或 Cloudflare Pages 未用最新 dist 重新部署。
-3. 若跳到 COS 但返回 404/403：COS 桶对象缺失（迁移未跑 / 上传失败）或 bucket 权限非公有读。
+3. 若跳到 cos-website 但返回 `NoSuchWebsiteConfiguration`（404 XML）：桶未开启「静态网站」功能，去 COS 控制台开启（索引文档 `index.html`）。
+4. 若返回 404/403 但非 WebsiteConfiguration 错误：COS 桶对象缺失（迁移未跑 / 上传失败）或 bucket 权限非公有读。
 
 ## 站点流量统计（友盟+ U-Web，仅平台前端）
 

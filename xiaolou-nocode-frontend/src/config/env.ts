@@ -12,16 +12,17 @@ export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localho
 // 静态资源地址
 export const STATIC_BASE_URL = `${API_BASE_URL}/static`
 
-// COS 公有读部署域名（可选）。配置后"查看作品"直接走 COS 直链（全屏、不受 Railway 临时盘影响），
+// COS 静态网站域名（可选，须为 cos-website 域名而非默认域名）。配置后"查看作品"直接走 COS 静态网站
+// 直链（全屏、不受 Railway 临时盘影响，且 cos-website 域名不带强制下载头、会自动补 index.html）；
 // 未配置则回退到后端 StaticResourceController (/api/static/{deployKey}/)
 export const COS_DEPLOY_HOST = import.meta.env.VITE_COS_DEPLOY_HOST || ''
 
 // 获取部署应用的完整URL
-// 已配置 COS 公有域名时直接返回 COS 直链（COS 非静态网站服务，需精确补 index.html）；
+// 已配置 COS 静态网站域名时返回目录 URL（静态网站服务自动补 index.html、无强制下载）；
 // 否则回退后端 StaticResourceController 托管（该控制器会自动补 index.html）
 export const getDeployUrl = (deployKey: string) => {
   if (COS_DEPLOY_HOST) {
-    return `${COS_DEPLOY_HOST.replace(/\/$/, '')}/code-deploy/${deployKey}/index.html`
+    return `${COS_DEPLOY_HOST.replace(/\/$/, '')}/code-deploy/${deployKey}/`
   }
   return `${STATIC_BASE_URL}/${deployKey}/`
 }

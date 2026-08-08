@@ -33,6 +33,7 @@ Railway 容器文件系统为临时盘（ephemeral），容器重启后两个目
 - [x] 联调步骤文档化（见 design.md §部署持久化联调）
 - [x] **生产环境闭环**（2026-08-09）：Railway 后端 cos.client.* 环境变量就位 + 本地 tmp/code_deploy 一次性迁移上 COS（27 deployKey / 144 文件）+ 前端 .env.production 配 `VITE_COS_DEPLOY_HOST` 并 Cloudflare Pages 重新部署；COS 直链 `code-deploy/jkJ12P/index.html` 验证 200。详见 design.md §8。
 - [x] **COS 目录 404 修正**（2026-08-09）：前端 `getDeployUrl` COS 分支由 `.../code-deploy/{deployKey}/` 改为 `.../code-deploy/{deployKey}/index.html`，因为 COS 非静态网站服务、目录 URL 会 `NoSuchKey`（404 XML）。重新构建 + Cloudflare Pages 部署验证通过。
+- [x] **强制下载问题修复——改用 cos-website 域名**（2026-08-09）：默认域名 `*.cos.ap-shanghai.myqcloud.com` 对 2024-01 后新桶强制返回 `Content-Disposition: attachment` 导致点击"查看作品"被下载白屏（无备案无法关闭）。方案 B：前端 `.env.production` 的 `VITE_COS_DEPLOY_HOST` 改为 `https://xiaolou-bi-1382226492.cos-website.ap-shanghai.myqcloud.com`，`getDeployUrl` COS 分支去掉硬拼的 `index.html`（由静态网站服务自动补）。前置：需在 COS 控制台开启「静态网站」（索引 `index.html`）。代码改动已完成，待用户开启静态网站 + 重新 Cloudflare 部署后生效。
 
 ## M6 站点流量统计（友盟+ U-Web，仅平台前端）
 
