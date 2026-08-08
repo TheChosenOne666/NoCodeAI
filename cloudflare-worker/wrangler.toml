@@ -1,0 +1,6 @@
+name = "cos-view-proxy"
+main = "cos-view-proxy.js"
+compatibility_date = "2024-09-23"
+
+# Worker 路由域名（免费版为 *.workers.dev 子域）
+routes = []

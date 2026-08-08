@@ -72,21 +72,27 @@ getDeployUrl(deployKey) =
 - 删除应用会同步删 COS 资源（不可恢复），删除前需确认。
 
 ### 8. 生产环境部署要点（2026-08-09 实测）
-- **前端 `.env.production` 必须配 `VITE_COS_DEPLOY_HOST=https://xiaolou-bi-1382226492.cos-website.ap-shanghai.myqcloud.com`**（cos-website 静态网站域名）。
+- **前端 `.env.production` 配 `VITE_COS_DEPLOY_HOST` 指向 Cloudflare Worker 代理域名**（见下方方案 A），由 Worker 反向代理 COS 并剥离强制下载头。
   - 未配时 `getDeployUrl` 回退到 `API_BASE_URL/static/{deployKey}/`，对应 Railway 后端 `StaticResourceController`。
   - Railway 容器**无持久化目录**（`tmp/code_deploy` 不存在），回退路径**必定 404**。精品案例"查看作品"上线前一直就是这个原因。
-- **切换 cos-website 的原因**（2026-08-09）：COS 默认域名（`*.cos.ap-shanghai.myqcloud.com`）对 2024-01 后新桶强制返回 `Content-Disposition: attachment` + `x-cos-force-download: true`，浏览器会下载而非展示，且无备案域名无法关闭该策略。改用 cos-website 静态网站域名后：① 不带强制下载头，浏览器直接展示；② 静态网站服务自动补 `index.html`，访问目录 URL 即可。
-- **前置条件**：必须在 COS 控制台为桶 `xiaolou-bi-1382226492` 开启「静态网站」功能（索引文档填 `index.html`、错误文档填 `index.html`），否则 cos-website 域名返回 `NoSuchWebsiteConfiguration`（404）。
+- **强制下载根因**（2026-08-09 实测确认）：腾讯云对 2024-01 后新建桶的**所有域名**（含默认域名 `*.cos.ap-shanghai.myqcloud.com` 与静态网站域名 `*.cos-website.ap-shanghai.myqcloud.com`）统一返回 `Content-Disposition: attachment` + `x-cos-force-download: true`。无备案域名无法关闭该策略。实测：开启静态网站后 cos-website 域名虽能自动补 `index.html`（200/text/html），**但强制下载头依旧存在** → 方案 B（cos-website）**无效**。
+- **最终方案 A：Cloudflare Worker 代理剥离下载头**（2026-08-09 采用）。Cloudflare Worker 作为反向代理：请求上游 COS（仍用 cos-website 域名以自动补 index.html），剥离 `Content-Disposition` / `x-cos-force-download`，浏览器直接展示。Worker 路由例如 `cos-view.xiaolou-nocode.workers.dev`，前端 `VITE_COS_DEPLOY_HOST` 指向它。详情见下方 §8.1。
 - 后端 `cos.client.*` 配置已通过 Railway 环境变量注入（变量名 `COS_ACCESS_KEY` / `COS_SECRET_KEY` / `COS_REGION` / `COS_BUCKET` / `COS_HOST`，由 prod profile `${COS_*}` 占位符消费）。
 - 一次性迁移 `CosDeployMigrationRunner` 已将本地 `tmp/code_deploy/*` 全部上传 COS（27 个 deployKey、144 文件），生产 COS 桶 `xiaolou-bi-1382226492` 公有读。
 - Cloudflare Pages（前端）部署项目 `xiaolou-nocode`，生产域名 `https://xiaolou-nocode.pages.dev`。
-- 联调验证（2026-08-09）：开启静态网站后 `https://xiaolou-bi-1382226492.cos-website.ap-shanghai.myqcloud.com/code-deploy/jkJ12P/` 应返回 `200 / text/html`（由静态网站自动补 index.html）。
+
+#### 8.1 Cloudflare Worker 代理实现（方案 A）
+- 路由：`https://cos-view.xiaolou-nocode.workers.dev/{path}` → 代理到 `https://xiaolou-bi-1382226492.cos-website.ap-shanghai.myqcloud.com/{path}`。
+- Worker 逻辑：fetch 上游，新建 Response，复制 body 与 content-type 等头，**删除** `content-disposition` 与 `x-cos-force-download`。
+- CORS：因前端（Cloudflare Pages）与 Worker 同主域或需跨域，Worker 需返回 `Access-Control-Allow-Origin: *`（仅供预览展示）。
+- 前端：`.env.production` 设 `VITE_COS_DEPLOY_HOST=https://cos-view.xiaolou-nocode.workers.dev`，`getDeployUrl` 仍返回 `.../code-deploy/{deployKey}/`（静态网站自动补 index.html）。
 
 ### 9. 调试检查清单（精品案例查看作品排查）
-1. 浏览器 DevTools → Network → 点击"查看作品"，看实际请求 URL 是 cos-website 直链还是 Railway `/api/static/...`。
+1. 浏览器 DevTools → Network → 点击"查看作品"，看实际请求 URL 是 Worker 代理直链还是 Railway `/api/static/...`。
 2. 若跳到 Railway `/api/static/...`：前端 `.env.production` 缺 `VITE_COS_DEPLOY_HOST` 或 Cloudflare Pages 未用最新 dist 重新部署。
-3. 若跳到 cos-website 但返回 `NoSuchWebsiteConfiguration`（404 XML）：桶未开启「静态网站」功能，去 COS 控制台开启（索引文档 `index.html`）。
-4. 若返回 404/403 但非 WebsiteConfiguration 错误：COS 桶对象缺失（迁移未跑 / 上传失败）或 bucket 权限非公有读。
+3. 若 Worker 返回 5xx：Worker 上游地址错误（应为 cos-website 域名）或 Worker 未部署。
+4. 若返回 404/403：COS 桶对象缺失（迁移未跑 / 上传失败）或 bucket 权限非公有读。
+5. 若仍被下载：Worker 未正确删除 `content-disposition` / `x-cos-force-download` 头，检查 Worker 代码。
 
 ## 站点流量统计（友盟+ U-Web，仅平台前端）
 
