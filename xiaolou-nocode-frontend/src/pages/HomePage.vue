@@ -40,7 +40,98 @@ const featuredAppsPage = reactive({
   current: 1,
   pageSize: 6,
   total: 0,
+  showPagination: false,
 })
+
+// 后端未部署/接口异常时的本地兜底精选案例，取自 MySQL nocode.app 表 priority=99 记录（共 7 条）
+// 与后端 /app/good/list/page/vo 返回结构对齐，保证每位访客进首页都能看到真实精选案例
+const fallbackFeaturedApps: API.AppVO[] = [
+  {
+    id: 2053688222270836737,
+    appName: '简历制作助手',
+    cover: 'https://xiaolou-bi-1382226492.cos.ap-shanghai.myqcloud.com/screenshots/2026/05/11/54b6eb89compressed.jpg',
+    initPrompt: '生成一个不超过100行的简历制作首页',
+    codeGenType: 'html',
+    deployKey: 'H0wUnd',
+    priority: 99,
+    userId: 2052338399462486018,
+    user: { id: 2052338399462486018, userName: '官方', userAvatar: '', userRole: 'admin' },
+  },
+  {
+    id: 2068729188073512961,
+    appName: '考研/专升本规划网',
+    cover: 'https://xiaolou-bi-1382226492.cos.ap-shanghai.myqcloud.com/screenshots/2026/06/23/cf193cb2compressed.jpg',
+    initPrompt: '做一个考研、专升本规划网站，各种专业、学科、学习计划、目标、真题',
+    codeGenType: 'vue_project',
+    deployKey: 'wLxkTw',
+    priority: 99,
+    userId: 2052338399462486018,
+    user: { id: 2052338399462486018, userName: '官方', userAvatar: '', userRole: 'admin' },
+  },
+  {
+    id: 2054167195589234690,
+    appName: '修仙小游戏',
+    cover: 'https://xiaolou-bi-1382226492.cos.ap-shanghai.myqcloud.com/screenshots/2026/06/24/2dcf0a55compressed.jpg',
+    initPrompt: '生成一个完整的修仙小游戏，有交互效果',
+    codeGenType: 'vue_project',
+    deployKey: 'r7BaUv',
+    priority: 99,
+    userId: 2052338399462486018,
+    user: { id: 2052338399462486018, userName: '官方', userAvatar: '', userRole: 'admin' },
+  },
+  {
+    id: 2054161901786189826,
+    appName: '植物大战僵尸小游戏',
+    cover: 'https://xiaolou-bi-1382226492.cos.ap-shanghai.myqcloud.com/screenshots/2026/05/12/3818fed5compressed.jpg',
+    initPrompt: '生成模仿复刻完整的植物大战僵尸小游戏界面',
+    codeGenType: 'vue_project',
+    deployKey: 'I00Oyc',
+    priority: 99,
+    userId: 2052338399462486018,
+    user: { id: 2052338399462486018, userName: '官方', userAvatar: '', userRole: 'admin' },
+  },
+  {
+    id: 2054142517407576066,
+    appName: '场景沉浸式语言学习网',
+    cover: 'https://xiaolou-bi-1382226492.cos.ap-shanghai.myqcloud.com/screenshots/2026/05/12/a82562cfcompressed.jpg',
+    initPrompt: '生成场景沉浸式语言学习网站，在虚拟小镇中学习日常交流语言',
+    codeGenType: 'vue_project',
+    deployKey: 'jkJ12P',
+    priority: 99,
+    userId: 2052338399462486018,
+    user: { id: 2052338399462486018, userName: '官方', userAvatar: '', userRole: 'admin' },
+  },
+  {
+    id: 2054140639676395521,
+    appName: '短视频平台',
+    cover: 'https://xiaolou-bi-1382226492.cos.ap-shanghai.myqcloud.com/screenshots/2026/05/12/33815b8acompressed.jpg',
+    initPrompt: '制作一个类似抖音界面的视频网站',
+    codeGenType: 'vue_project',
+    deployKey: 'WVsVTS',
+    priority: 99,
+    userId: 2052338399462486018,
+    user: { id: 2052338399462486018, userName: '官方', userAvatar: '', userRole: 'admin' },
+  },
+  {
+    id: 2054124280896745474,
+    appName: '中国象棋',
+    cover: 'https://xiaolou-bi-1382226492.cos.ap-shanghai.myqcloud.com/screenshots/2026/05/12/7a630f14compressed.jpg',
+    initPrompt: '生成一个不超过150行代码的中国象棋小游戏界面',
+    codeGenType: 'html',
+    deployKey: 'rpkcN3',
+    priority: 99,
+    userId: 2052338399462486018,
+    user: { id: 2052338399462486018, userName: '官方', userAvatar: '', userRole: 'admin' },
+  },
+]
+
+// 后端兜底模式下按当前页切片展示，保证分页（下一页）可用
+const loadFallbackFeaturedApps = () => {
+  const start = (featuredAppsPage.current - 1) * featuredAppsPage.pageSize
+  featuredApps.value = fallbackFeaturedApps.slice(start, start + featuredAppsPage.pageSize)
+  featuredAppsPage.total = fallbackFeaturedApps.length
+  featuredAppsPage.showPagination = fallbackFeaturedApps.length > featuredAppsPage.pageSize
+}
 
 // 设置提示词
 const setPrompt = (prompt: string) => {
@@ -120,12 +211,17 @@ const loadFeaturedApps = async () => {
       sortOrder: 'desc',
     })
 
-    if (res.data.code === 0 && res.data.data) {
+    if (res.data.code === 0 && res.data.data && (res.data.data.records || []).length > 0) {
       featuredApps.value = res.data.data.records || []
       featuredAppsPage.total = res.data.data.total ?? res.data.data.totalRow ?? 0
+      featuredAppsPage.showPagination = featuredAppsPage.total > featuredAppsPage.pageSize
+    } else {
+      // 后端未部署或暂返回空：使用本地兜底精选案例，按当前页切片，保证翻页可用
+      loadFallbackFeaturedApps()
     }
   } catch (error) {
-    console.error('加载精选应用失败：', error)
+    console.warn('加载精选应用失败，使用本地兜底数据：', error)
+    loadFallbackFeaturedApps()
   }
 }
 
@@ -322,11 +418,10 @@ onMounted(() => {
             :key="app.id"
             :app="app"
             :featured="true"
-            @view-chat="viewChat"
             @view-work="viewWork"
           />
         </div>
-        <div class="pagination-wrapper">
+        <div class="pagination-wrapper" v-if="featuredAppsPage.showPagination">
           <a-pagination
             v-model:current="featuredAppsPage.current"
             v-model:page-size="featuredAppsPage.pageSize"
@@ -433,7 +528,7 @@ onMounted(() => {
 /* 英雄区域 */
 .hero-section {
   text-align: center;
-  padding: 80px 0 60px;
+  padding: 96px 0 60px;
   margin-bottom: 28px;
   color: #1e293b;
   position: relative;
@@ -513,14 +608,16 @@ onMounted(() => {
 
 .hero-description {
   font-size: 20px;
-  margin: 0;
+  margin: 0 auto;
   opacity: 0.9;
   position: relative;
   z-index: 2;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  min-height: 48px; /* 固定高度，确保两行文字的空间 */
+  max-width: 720px;
+  padding: 0 20px;
+  line-height: 1.6;
 }
 
 .gradient-text {
@@ -534,18 +631,9 @@ onMounted(() => {
 
 .typewriter-text {
   display: inline-block;
-  white-space: pre-wrap;
+  white-space: normal;
+  word-break: break-word;
   min-height: 1.2em;
-}
-
-.typewriter-text::after {
-  content: '|';
-  animation: blink 0.7s infinite;
-}
-
-@keyframes blink {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0; }
 }
 
 /* 输入区域 */
@@ -663,11 +751,20 @@ onMounted(() => {
 /* 响应式设计 */
 @media (max-width: 768px) {
   .hero-title {
-    font-size: 32px;
+    font-size: 28px;
+    line-height: 1.25;
+    padding: 0 16px;
   }
 
   .hero-description {
-    font-size: 16px;
+    font-size: 15px;
+    line-height: 1.7;
+    padding: 0 16px;
+    gap: 6px;
+  }
+
+  .hero-section {
+    padding: 48px 0 36px;
   }
 
   .app-grid,

@@ -73,6 +73,11 @@ const originItems = [
     title: '主页',
   },
   {
+    key: '/my/works',
+    label: '个人作品',
+    title: '个人作品',
+  },
+  {
     key: '/admin/userManage',
     label: '用户管理',
     title: '用户管理',
@@ -91,10 +96,10 @@ const originItems = [
 
 // 过滤菜单项
 const filterMenus = (menus = [] as MenuProps['items']) => {
+  const loginUser = loginUserStore.loginUser
   return menus?.filter((menu) => {
     const menuKey = menu?.key as string
     if (menuKey?.startsWith('/admin')) {
-      const loginUser = loginUserStore.loginUser
       if (!loginUser || loginUser.userRole !== 'admin') {
         return false
       }
@@ -132,9 +137,15 @@ const doLogout = async () => {
 </script>
 
 <style scoped>
-.header {
-  background: #fff;
+.header,
+.header.ant-layout-header {
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  background: transparent !important;
   padding: 0 24px;
+  border-bottom: none !important;
+  box-shadow: none !important;
 }
 
 .header-left {
@@ -156,5 +167,18 @@ const doLogout = async () => {
 
 .ant-menu-horizontal {
   border-bottom: none !important;
+  background: transparent !important;
+}
+
+:deep(.ant-menu-item) {
+  color: #334155 !important;
+}
+
+:deep(.ant-menu-item-selected) {
+  color: #1890ff !important;
+}
+
+:deep(.ant-menu-item:hover) {
+  color: #1890ff !important;
 }
 </style>

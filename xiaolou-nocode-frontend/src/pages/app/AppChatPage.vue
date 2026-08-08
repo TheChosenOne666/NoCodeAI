@@ -63,7 +63,7 @@
                 <MarkdownRenderer v-if="message.content" :content="message.content" />
                 <div v-if="message.loading" class="loading-indicator">
                   <a-spin size="small" />
-                  <span>AI 正在思考...</span>
+                  <span>AI `  正在思考...</span>
                 </div>
               </div>
             </div>
