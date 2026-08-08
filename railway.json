@@ -1,8 +1,8 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "builder": "NIXPACKS",
-    "buildCommand": "mvn -B package -DskipTests"
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "Dockerfile"
   },
   "deploy": {
     "startCommand": "java -jar target/xiaolou-nocode-backend-0.0.1-SNAPSHOT.jar",
@@ -12,8 +12,7 @@
     "restartPolicyMaxRetries": 10,
     "env": {
       "SPRING_PROFILES_ACTIVE": "prod",
-      "JAVA_TOOL_OPTIONS": "-Xmx512m -Xss512k",
-      "MAVEN_OPTS": "-Xmx512m -XX:MaxRAM=512m"
+      "JAVA_TOOL_OPTIONS": "-Xmx512m -Xss512k"
     }
   }
 }

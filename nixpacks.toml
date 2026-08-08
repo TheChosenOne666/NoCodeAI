@@ -1,8 +1,0 @@
-# 强制 Nixpacks 使用 JDK 21（pom.xml 要求 Java 21）
-# 注意：Nixpacks 通过 NIXPACKS_JDK_VERSION 选 JDK，不能用 nixPkgs 包名
-[environment]
-NIXPACKS_JDK_VERSION = "21"
-
-# 构建阶段：补 mvnw 可执行权限后打包（与 railway.json buildCommand 一致可二选一）
-[phases.build]
-cmds = ["chmod +x mvnw", "./mvnw -B package -DskipTests"]
