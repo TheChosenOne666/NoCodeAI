@@ -2,9 +2,16 @@
 
 这是一个用自然语言生成网站应用的平台。用户描述想要什么，AI 直接生成可预览、可下载、可部署的代码。
 
+[![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://www.java.com)
+[![Spring Cloud](https://img.shields.io/badge/Spring%20Cloud-%E5%BE%AE%E6%9C%8D%E5%8A%A1-6DB33F?logo=spring&logoColor=white)](https://spring.io/projects/spring-cloud)
+[![LangChain4j](https://img.shields.io/badge/LangChain4j-AI%20Agent-4A90E2)](https://docs.langchain4j.dev)
+[![Redis](https://img.shields.io/badge/Redis-%E7%BC%93%E5%AD%98%2F%E9%99%90%E6%B5%81-DC382D?logo=redis&logoColor=white)](https://redis.io)
+[![Dubbo](https://img.shields.io/badge/Dubbo-RPC-3C8CE7)](https://dubbo.apache.org)
+[![Nacos](https://img.shields.io/badge/Nacos-%E6%B3%A8%E5%86%8C%E4%B8%AD%E5%BF%83-1E90FF)](https://nacos.io)
+
 ## 项目简介
 
-核心功能很简单：用户输入一句话，比如"帮我做一个个人博客网站"，系统会自动生成完整的页面代码，支持在线预览和一键下载。
+核心功能很简单：用户输入一句话，比如"帮我做一个个人博客网站"，系统会自动生成完整的页面代码，支持在线预览、指定修改、代码下载和一键部署。
 
 ## 平台预览
 
@@ -17,6 +24,8 @@
 ![应用预览 - 生成结果实时预览](docs/images/04-app-preview.png)
 
 ![应用详情 - 项目详情与配置](docs/images/05-app-detail.png)
+
+![登录注册页 - 品牌登录入口](docs/images/06-login-page.png)
 
 技术上做了几件有意思的事：
 
