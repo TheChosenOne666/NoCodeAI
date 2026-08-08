@@ -69,3 +69,18 @@ getDeployUrl(deployKey) =
 ### 7. 破坏性变更提示
 - 前端 `getDeployUrl` 行为变更：配置了 `VITE_COS_DEPLOY_HOST` 后，预览地址从 `/api/static/{deployKey}/` 变为 COS 直链。
 - 删除应用会同步删 COS 资源（不可恢复），删除前需确认。
+
+## 站点流量统计（友盟+ U-Web，仅平台前端）
+
+### 范围
+仅 `xiaolou-nocode-frontend` 接入友盟统计；AI 生成的作品站点不接入（避免统计噪音、且站点 ID 与平台账户绑定）。
+
+### 实现
+- 在 `xiaolou-nocode-frontend/index.html` 的 `</head>` 前注入：
+  ```html
+  <script src="https://umengit-cdn.uemc.net/umeng-web.js" website-id="019fe2bb-abb8-7b42-9d36-1a970b9526f5" async></script>
+  ```
+- 纯前端行为，后端无改动。站点 ID 为平台友盟账户固定值。
+
+### 验证
+构建部署后，浏览器 Network 确认 `umeng-web.js` 返回 200；友盟控制台对应站点可见实时数据。
