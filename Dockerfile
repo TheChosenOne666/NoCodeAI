@@ -1,4 +1,5 @@
 # Railway 部署：用 Dockerfile 显式装 JDK 21 + Maven，绕开 Nixpacks 自动探测不可控问题
+# cache-bust: 2026-08-08-1
 FROM maven:3.9-eclipse-temurin-21 AS builder
 WORKDIR /app
 
