@@ -1,0 +1,8 @@
+# 只部署根目录单体后端（src/ + 根 pom.xml），排除前端与微服务
+xiaolou-nocode-frontend/
+ai-no-code-parent-microservice/
+target/
+tmp/
+generated-images/
+*.log
+.edgeone/
