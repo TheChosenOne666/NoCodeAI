@@ -1,5 +1,5 @@
 # Railway 部署：用 Dockerfile 显式装 JDK 21 + Maven，绕开 Nixpacks 自动探测不可控问题
-# cache-bust: 2026-08-08-2 强制 Railway 重读构建上下文并清除旧 startCommand 缓存
+# cache-bust: 2026-08-08-3 强制 Railway 完全重建并清除所有旧 startCommand 缓存
 FROM maven:3.9-eclipse-temurin-21 AS builder
 WORKDIR /app
 

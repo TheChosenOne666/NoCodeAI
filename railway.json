@@ -5,6 +5,7 @@
     "dockerfilePath": "Dockerfile"
   },
   "deploy": {
+    "startCommand": "java -jar app.jar --server.port=${PORT:-8080}",
     "healthcheckPath": "/api/doc.html",
     "healthcheckTimeout": 100,
     "restartPolicyType": "ON_FAILURE",
