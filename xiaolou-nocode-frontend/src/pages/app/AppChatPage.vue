@@ -676,9 +676,9 @@ const generateCode = async (userMessage: string, aiMessageIndex: number, request
       if (streamCompleted) return
 
       try {
-        // 解析JSON包装的数据
+        // 解析JSON包装的数据（后端字段名为 data）
         const parsed = JSON.parse(event.data)
-        const content = parsed.d
+        const content = parsed.data
 
         // 拼接内容
         if (content !== undefined && content !== null) {
@@ -738,20 +738,10 @@ const generateCode = async (userMessage: string, aiMessageIndex: number, request
     // 处理错误
     eventSource.onerror = function () {
       if (streamCompleted || !isGenerating.value) return
-      // 检查是否是正常的连接关闭
-      if (eventSource?.readyState === EventSource.CONNECTING) {
-        streamCompleted = true
-        isGenerating.value = false
-        eventSource?.close()
-        chatEventSource.value = null
-
-        setTimeout(async () => {
-          await fetchAppInfo()
-          await updatePreview()
-        }, 1000)
-      } else {
-        handleError(new Error('SSE连接错误'), aiMessageIndex)
-      }
+      // EventSource 触发 onerror 即视为连接异常（正常结束由 done 事件处理，不会触发 onerror）
+      eventSource?.close()
+      chatEventSource.value = null
+      handleError(new Error('SSE连接错误'), aiMessageIndex)
     }
   } catch (error) {
     console.error('创建 EventSource 失败：', error)
