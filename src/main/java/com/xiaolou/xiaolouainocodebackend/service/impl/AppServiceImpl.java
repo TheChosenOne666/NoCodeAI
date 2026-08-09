@@ -2,7 +2,6 @@ package com.xiaolou.xiaolouainocodebackend.service.impl;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.io.FileUtil;
 import cn.hutool.core.util.RandomUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -21,6 +20,7 @@ import com.xiaolou.xiaolouainocodebackend.model.dto.app.AppAddRequest;
 import com.xiaolou.xiaolouainocodebackend.model.dto.app.AppQueryRequest;
 import com.xiaolou.xiaolouainocodebackend.model.dto.codegen.CodeGenStreamEvent;
 import com.xiaolou.xiaolouainocodebackend.model.entity.App;
+import com.xiaolou.xiaolouainocodebackend.model.entity.AppDeployAsset;
 import org.springframework.http.codec.ServerSentEvent;
 import com.xiaolou.xiaolouainocodebackend.model.entity.User;
 import com.xiaolou.xiaolouainocodebackend.model.enums.ChatHistoryMessageTypeEnum;
@@ -28,6 +28,7 @@ import com.xiaolou.xiaolouainocodebackend.model.enums.CodeGenTypeEnum;
 import com.xiaolou.xiaolouainocodebackend.model.vo.AppVO;
 import com.xiaolou.xiaolouainocodebackend.model.vo.UserVO;
 import com.xiaolou.xiaolouainocodebackend.service.AppService;
+import com.xiaolou.xiaolouainocodebackend.mapper.AppDeployAssetMapper;
 import com.xiaolou.xiaolouainocodebackend.mapper.AppMapper;
 import com.xiaolou.xiaolouainocodebackend.service.ChatHistoryService;
 import com.xiaolou.xiaolouainocodebackend.service.ScreenshotService;
@@ -40,6 +41,7 @@ import reactor.core.publisher.Flux;
 
 import java.io.File;
 import java.io.Serializable;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -71,6 +73,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
 
     @Resource
     private ScreenshotService screenshotService;
+
+    @Resource
+    private AppDeployAssetMapper appDeployAssetMapper;
 
     @Resource
     private AiCodeGenTypeRoutingServiceFactory aiCodeGenTypeRoutingServiceFactory;
@@ -268,10 +273,10 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
             sourceDir = distDir;
             log.info("Vue 项目构建成功，将部署 dist 目录: {}", distDir.getAbsolutePath());
         }
-        // 8. 复制文件到部署目录
-        String deployDirPath = AppConstant.CODE_DEPLOY_ROOT_DIR + File.separator + deployKey;
+        // 8. 将部署文件写入数据库 app_deploy_asset（与精品案例一致，访问时由 StaticResourceController 查库返回，
+        //    不再依赖本地磁盘，线上环境稳定且 URL 不绑定 localhost）
         try {
-            FileUtil.copyContent(sourceDir, new File(deployDirPath), true);
+            saveDeployAssets(deployKey, sourceDir);
         } catch (Exception e) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "部署失败：" + e.getMessage());
         }
@@ -286,6 +291,70 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         String appDeployUrl = String.format("%s/static/%s/", AppConstant.CODE_DEPLOY_HOST, deployKey);
         generateAppScreenshotAsync(appId, appDeployUrl);
         return appDeployUrl;
+    }
+
+    /**
+     * 将部署源目录下的所有文件写入 app_deploy_asset 表（与精品案例一致）。
+     * 访问时由 StaticResourceController 查库返回，不依赖本地磁盘。
+     *
+     * @param deployKey 部署标识
+     * @param sourceDir 部署源目录（HTML 为项目根目录，Vue 为 dist 目录）
+     */
+    private void saveDeployAssets(String deployKey, File sourceDir) {
+        List<AppDeployAsset> assets = new ArrayList<>();
+        collectDeployAssets(deployKey, sourceDir, sourceDir, assets);
+        ThrowUtils.throwIf(assets.isEmpty(), ErrorCode.SYSTEM_ERROR, "部署内容为空，未找到可部署文件");
+        // 先清理同 deployKey 的旧资源（重复部署场景），再批量写入
+        QueryWrapper<AppDeployAsset> deleteWrapper = new QueryWrapper<>();
+        deleteWrapper.eq("deploy_key", deployKey);
+        appDeployAssetMapper.delete(deleteWrapper);
+        for (AppDeployAsset asset : assets) {
+            appDeployAssetMapper.insert(asset);
+        }
+        log.info("部署资源已写入数据库，deployKey={}，文件数={}", deployKey, assets.size());
+    }
+
+    /**
+     * 递归收集部署文件，生成 AppDeployAsset 列表。
+     *
+     * @param deployKey    部署标识
+     * @param rootDir      源根目录（用于计算相对路径）
+     * @param current      当前遍历目录
+     * @param assets       收集结果
+     */
+    private void collectDeployAssets(String deployKey, File rootDir, File current, List<AppDeployAsset> assets) {
+        File[] children = current.listFiles();
+        if (children == null) {
+            return;
+        }
+        for (File file : children) {
+            if (file.isDirectory()) {
+                collectDeployAssets(deployKey, rootDir, file, assets);
+                continue;
+            }
+            String relativePath = rootDir.toURI().relativize(file.toURI()).getPath();
+            if (relativePath.startsWith("/")) {
+                relativePath = relativePath.substring(1);
+            }
+            try {
+                byte[] content = Files.readAllBytes(file.toPath());
+                String contentType = Files.probeContentType(file.toPath());
+                if (StrUtil.isBlank(contentType)) {
+                    contentType = "application/octet-stream";
+                }
+                AppDeployAsset asset = new AppDeployAsset();
+                asset.setDeployKey(deployKey);
+                asset.setFilePath(relativePath);
+                asset.setContentType(contentType);
+                asset.setFileSize((long) content.length);
+                asset.setContent(content);
+                asset.setIsDelete(0);
+                assets.add(asset);
+            } catch (Exception e) {
+                log.error("读取部署文件失败：{}", file.getAbsolutePath(), e);
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "读取部署文件失败：" + file.getName());
+            }
+        }
     }
 
     /**

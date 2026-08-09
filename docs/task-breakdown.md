@@ -40,18 +40,19 @@ Railway 容器文件系统为临时盘（ephemeral），容器重启后目录丢
 ### 需求描述
 1. 新增 `app_deploy_asset` 表（deploy_key, file_path, content_type, file_size, content LONGBLOB）。
 2. `StaticResourceController` 本地盘未命中时回退查库返回二进制内容（content_type 按文件设定）。
-3. 仅导入 7 个精品案例（`app.priority=99`）的作品，普通用户部署作品仍走本地盘。
+3. 导入 7 个精品案例（`app.priority=99`）的作品入库。
 4. 前端 `getDeployUrl` 行为不变，无需改动。
 5. 提供幂等导入脚本，可重复将本地 `tmp/code_deploy/{deployKey}` 导入 DB。
 
 ### 进度
-- [x] 建表 SQL：`ai-no-code-app/src/main/resources/sql/app_deploy_asset.sql`
+- [x] 建表 SQL：`src/main/resources/sql/app_deploy_asset.sql`
 - [x] 实体 `AppDeployAsset` + Mapper `AppDeployAssetMapper.selectByDeployKeyAndPath`（显式 `@TableField` 映射，因 `map-underscore-to-camel-case: false`）
 - [x] `StaticResourceController` 增加 DB 回退读取（本地盘优先 → 查库 → 404）
 - [x] 导入脚本 `tmp_import/import_featured_assets.js`（Node + mysql2，仅导入 7 个精品案例，幂等）
 - [x] 已导入 38 个文件到 `app_deploy_asset`（H0wUnd, wLxkTw, r7BaUv, I00Oyc, jkJ12P, WVsVTS, rpkcN3）
 - [x] Maven 编译通过（`-pl ai-no-code-app`）
 - [x] DB 数据完整性验证（38 条、content 可读、content_type 正确）
+- [x] **【2026-08-10 扩展】普通用户「部署」也入库**：`AppServiceImpl.deployApp` 由"复制文件到本地 `tmp/code_deploy/{deployKey}`"改为"遍历源目录（HTML 项目根 / Vue dist）递归写入 `app_deploy_asset` 表（先删同 deployKey 旧记录再批量插入），访问 URL 仍为 `/api/static/{deployKey}/`，由 `StaticResourceController` 查库返回，彻底摆脱本地磁盘与 localhost 绑定"。即部署产物存储方式与精品案例完全一致。
 - [ ] 后端接口联调（需先启动 Nacos + 后端，见联调步骤）
 
 ### 联调步骤

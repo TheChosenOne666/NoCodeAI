@@ -29,7 +29,7 @@
 - **为何不依赖本地盘**：生产环境（Railway）文件系统为临时盘（ephemeral），容器重启后 `tmp/code_deploy` 目录丢失，导致"查看作品"返回 404/白屏。
 - **为何不用 COS**：腾讯云 2024-01 后新建桶默认域名及 cos-website 域名均强制 `Content-Disposition: attachment`，浏览器会下载而非展示；Cloudflare Worker 代理方案在国内被墙（workers.dev 无法访问）。经评估后采用 MySQL 直存方案，最稳、零额外基础设施依赖。
 - **回退策略**：`StaticResourceController` 优先读本地盘（本地开发体验不变），本地盘不存在时回退查 `app_deploy_asset` 表，前端 URL 逻辑无需任何改动。
-- **适用范围**：仅导入精品案例（`app.priority = 99` 的 7 个作品）。普通用户部署的作品仍走本地盘 / 后续部署流程，不强制入库（避免 BLOB 体积膨胀）。
+- **适用范围**：精品案例（`app.priority = 99` 的 7 个作品）入库，且**普通用户「部署」也入库**——`AppServiceImpl.deployApp` 已改为将部署产物（HTML 项目根目录 / Vue 构建后的 dist 目录）递归写入 `app_deploy_asset` 表，访问时由 `StaticResourceController` 查库返回。即所有已部署作品统一以数据库为唯一可信源，不再依赖本地临时盘。
 
 ### 2. 表结构（app_deploy_asset）
 | 列 | 类型 | 说明 |
@@ -58,6 +58,20 @@
    - 未命中：404
 ```
 注意：因 `map-underscore-to-camel-case: false`，实体字段用 `@TableField` 显式映射列名。
+
+#### 3.2 AppServiceImpl.deployApp（用户部署入库，2026-08-10）
+```
+1. 取 app.deployKey（无则生成 6 位随机串）
+2. 取 codeGenType，定位源目录 CODE_OUTPUT_ROOT_DIR/{type}_{appId}
+3. Vue 项目：先执行构建（vueProjectBuilder.buildProject），将 dist 目录作为源
+4. saveDeployAssets(deployKey, sourceDir)：
+   - 递归收集源目录下所有文件，计算相对路径（file_path）、MIME（Files.probeContentType）、字节（content）
+   - 先按 deploy_key 删除旧记录（幂等，支持重复部署）
+   - 批量 insert 到 app_deploy_asset
+5. 更新 app.deployKey / deployedTime
+6. 返回 /api/static/{deployKey}/（前端打开即由 StaticResourceController 查库返回，不依赖本地磁盘）
+```
+部署产物存储方式与精品案例完全一致，访问 URL 不变，彻底摆脱本地临时盘与 localhost 绑定。
 
 ### 4. 前端预览 URL（不变）
 `env.ts`：
