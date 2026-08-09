@@ -33,3 +33,9 @@ coverage
 application-local.yml
 **/application-local.yml
 *.local.yml
+
+# Maven 构建产物
+target/
+
+# 临时错误日志
+*.err

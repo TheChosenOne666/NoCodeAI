@@ -81,29 +81,33 @@ getDeployUrl(deployKey) = `${API_BASE_URL}/static/${deployKey}/`
 前端无需改动；生产环境访问 `/api/static/{deployKey}/` 由后端自动从 DB 取作品返回。
 
 ### 8. 生成后即时预览（/api/static/preview）
-- **场景**：用户在对话中生成 HTML/Vue 代码后，右侧"生成后的网页展示"iframe 需要即时预览刚生成的作品。
+- **场景**：用户在对话中生成 HTML/Vue 代码后，右侧"生成后的网页展示"iframe 需要即时预览刚生成的作品；
+  且**无论是否部署，重新进入应用都应保持展示该预览**（持久化）。
 - **落盘位置**：生成流程（`AiCodeGeneratorFacade.processCodeStream` 的 `doOnComplete`）把作品写入
-  `CODE_OUTPUT_ROOT_DIR/{codeGenType}_{appId}/index.html`，其中 `CODE_OUTPUT_ROOT_DIR = user.dir/tmp/code_output`。
+  `CODE_OUTPUT_ROOT_DIR/{codeGenType}_{appId}/`（HTML/MULTI_FILE）或构建后 `dist` 目录（Vue）。
 - **早期 404 根因**：原预览 URL 指向 `/api/static/{codeGenType}_{appId}/`，由 `StaticResourceController.serveStaticResource`
   从 `PREVIEW_ROOT_DIR = CODE_DEPLOY_ROOT_DIR`（`user.dir/tmp/code_deploy`）读取；但生成代码在 `code_output`、
   部署资源在 `code_deploy`，**两目录分离**导致预览永远 404（本地因目录曾一致而偶发可用，生产环境稳定复现）。
-- **修复（2026-08-09）**：新增独立预览路由 `GET /api/static/preview/{sourceDir}/**`，由
-  `StaticResourceController.servePreviewResource` 从 `CODE_OUTPUT_ROOT_DIR` 读取；
-  前端 `getStaticPreviewUrl` 改为返回 `/api/static/preview/{codeGenType}_{appId}/`。
-  抽取 `serveFromRoot(rootDir, prefix, dbKey, request)` 共用逻辑，预览分支**不查库**（预览内容来自生成输出目录，非持久化部署资源）。
-- **注意（Railway 临时盘）**：`CODE_OUTPUT_ROOT_DIR` 同样位于 Railway 临时文件系统，容器重启 / 新实例会清空，
-  因此「即时预览」仅在**同一次运行、生成后立即查看**有效；跨重启预览需重新生成或走部署流程（写 `code_deploy` + 查库回退）。
-- **前端改动**：`xiaolou-nocode-frontend/src/config/env.ts` 的 `getStaticPreviewUrl` 路径前缀由 `/static/` 改为 `/static/preview/`。
-- **旧路径兼容（2026-08-09 补充）**：`serveStaticResource` 在部署目录与 DB 均 404 时，回退到 `CODE_OUTPUT_ROOT_DIR/{deployKey}` 读取，
-  使**未更新前端的旧请求** `/api/static/{type}_{appId}/` 也能预览，避免前端未部署时预览失效。
+- **修复（2026-08-09）**：新增独立预览路由 `GET /api/static/preview/{sourceDir}/**`，前端 `getStaticPreviewUrl` 返回 `/api/static/preview/{codeGenType}_{appId}/`。
+- **持久化改造（2026-08-10）**：未部署预览原本依赖 `CODE_OUTPUT_ROOT_DIR`（Railway 临时盘，容器重启/重建即丢），
+  导致「重新进入预览没了」。现统一为：**生成完成时（HTML/MULTI_FILE 落盘后、Vue 构建成功后）把产物写入 `app_deploy_asset` 表，
+  deployKey = `preview_{appId}`**（`AppServiceImpl.savePreviewAssets`）。前端 `getStaticPreviewUrl` 改为返回
+  `/api/static/preview_{appId}/`（Vue 追加 `dist/index.html`），该路径经 `StaticResourceController.serveStaticResource`
+  → `PREVIEW_ROOT_DIR` 命中 → `selectByDeployKeyAndPath` 查库返回，与已部署作品同源查库，**彻底摆脱临时盘丢失问题**。
+  - HTML/MULTI_FILE：`AiCodeGeneratorFacade.processCodeStream` 的 `doOnComplete` 保存成功后调用 `appService.savePreviewAssets(appId, savedDir)`。
+  - Vue：`VueProjectGenStreamManager.onCompleteResponse` 构建成功、emit `PREVIEW_READY` 前调用 `appService.savePreviewAssets(appId, distDir)`，
+    且 `previewUrl` 同步改为 `/api/static/preview_{appId}/dist/index.html`。
 - **编辑模式需同源（2026-08-09 补充）**：可视化编辑（`VisualEditor` 向预览 iframe 注入脚本）依赖 `iframe.contentDocument`，
   跨域时该属性为 `null`（同源策略），脚本注入被静默吞掉，编辑模式完全失效。量产环境前端在 Cloudflare（`xiaolou-nocode.pages.dev`）、
   预览 iframe 若用 `VITE_API_BASE_URL` 拼接的绝对 Railway 域名则跨域。修复：`getStaticPreviewUrl` 与 `AppChatPage.vue` 的
   `preview-ready` 分支均改为**相对路径** `/api/static/preview/...`，保证 iframe 与前端页面同源。API 请求（fetch/EventSource）仍用 `API_BASE_URL` 绝对域名，不受影响。
 - **Cloudflare Pages rewrite（2026-08-10 补充）**：相对路径 `/api/static/preview/...` 在生产环境会命中 Cloudflare Pages 的静态托管，
-  而 Pages 上不存在该目录，会 fallback 返回前端 `index.html`，导致预览显示平台首页。修复：在 `public/_redirects` 添加
-  `200` rewrite 规则，把 `/api/static/preview/*` 代理到 Railway 后端 `https://nocodeai-production.up.railway.app/api/static/preview/:splat`。
-  状态码 `200` 为透明代理，用户/iframe 无感知，仍保持与前端页面同源，编辑模式继续可用。
+  而 Pages 上不存在该目录，会 fallback 返回前端 `index.html`，导致预览显示平台首页。
+  **注意**：改造后未部署预览路径变为 `/api/static/preview_{appId}/`（前缀仍是 `/api/static/preview/`），已由既有 rewrite 规则覆盖，无需新增。
+  修复：在 `public/_redirects` 添加 `200` rewrite 规则，把 `/api/static/preview/*` 代理到 Railway 后端
+  `https://nocodeai-production.up.railway.app/api/static/preview/:splat`。状态码 `200` 为透明代理，用户/iframe 无感知，仍保持同源，编辑模式继续可用。
+- **前端访问优先级（`AppChatPage.vue` `updatePreview`）**：已部署（`appInfo.deployKey` 存在）→ `getDeployUrl(deployKey)`；
+  未部署 → `getStaticPreviewUrl(codeGenType, appId)`（即 `/api/static/preview_{appId}/`）。两种情况均查库，持久化有效。
 
 ### 9. 输入框清空 / 保留策略（2026-08-09）
 - **场景**：应用聊天页发送提示词后，期望"生成成功则清空输入框、生成失败则保留输入以便重试"。

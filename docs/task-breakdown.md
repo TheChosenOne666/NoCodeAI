@@ -89,6 +89,37 @@ Railway 容器文件系统为临时盘（ephemeral），容器重启后目录丢
 4. DevTools → Network 观察预览 iframe 请求应为 `https://nocodeai-production.up.railway.app/api/static/preview/html_<appId>/`，状态 200 且返回生成的 HTML。
 5. 排错：若仍 404，去 Railway 后端 Logs 搜 `保存成功，路径为：` 确认文件落盘目录；对比预览请求的实际路径是否一致（应为 `code_output/html_<appId>`）。
 
+## M7-2 未部署预览持久化（重新进入不再丢失，2026-08-10）
+
+### 背景
+线上（Cloudflare/Railway）用户反馈：AI 生成后可正常预览，但**重新进入应用后预览没了**。
+根因：未部署预览依赖 `tmp/code_output`（Railway 临时盘），容器重启/重建后目录清空 → `/api/static/preview/...` 404。
+需求：**无论是否部署，生成后原本能预览，下次点进来也要保持展示该预览**（持久化）。
+
+### 需求描述
+1. 生成完成时把产物写入 `app_deploy_asset` 表，deployKey = `preview_{appId}`，与已部署作品同源查库。
+2. 前端未部署时预览 URL 改为 `/api/static/preview_{appId}/`（Vue 追加 `dist/index.html`），由 `StaticResourceController` 查库返回，不再依赖临时盘。
+3. 已部署路径维持 `/api/static/{deployKey}/` 不变。
+
+### 进度
+- [x] `AppServiceImpl` 新增 `savePreviewAssets(appId, sourceDir)`（`@Override`，按 `preview_{appId}` 写库，先删后插）
+- [x] `AppService` 接口声明 `savePreviewAssets(Long, File)`（补充 `import java.io.File`）
+- [x] `AiCodeGeneratorFacade.processCodeStream` 的 `doOnComplete`：HTML/MULTI_FILE 落盘成功后调用 `appService.savePreviewAssets(appId, savedDir)`
+- [x] `VueProjectGenStreamManager.onCompleteResponse`：Vue 构建成功后调用 `appService.savePreviewAssets(appId, distDir)`，且 `previewUrl` 改为 `/api/static/preview_{appId}/dist/index.html`
+- [x] 前端 `env.ts` 的 `getStaticPreviewUrl` 路径改为 `/api/static/preview_{appId}/`（Vue 追加 `dist/index.html`）
+- [x] `AppChatPage.vue` `updatePreview` 注释更新（未部署也持久化查库）；`preview-ready` 分支复用 `getStaticPreviewUrl`
+- [x] 后端 Maven 编译通过（`mvn -q -o compile`）
+- [x] 前端 type-check 通过（`vue-tsc --noEmit`）
+- [ ] 前后端重新部署 + 联调（步骤见下）
+
+### 联调步骤
+1. 后端重新部署到 Railway（代码改动需重新构建镜像/重启）。
+2. 前端重新构建部署到 Cloudflare Pages（确认 `env.ts` 改动生效）。
+3. 浏览器打开平台 → 进入任一应用聊天页 → 生成一段 HTML/Vue 代码 → 等待右侧预览加载成功。
+4. **重新进入该应用**（刷新/关闭重开）→ 右侧预览应仍正常展示，不再 404（验证持久化）。
+5. 排错：Railway 后端 Logs 应出现 `预览资源已持久化到数据库，deployKey=preview_{appId}，文件数=N`；
+   直接访问 `/api/static/preview_{appId}/` 返回 200 HTML。若 404，确认 `app_deploy_asset` 表存在该 deployKey 记录。
+
 ## M7-1 前端编辑模式失效修复 + 输入框清空/保留逻辑
 
 ### 背景

@@ -290,7 +290,7 @@ import DeploySuccessModal from '@/components/DeploySuccessModal.vue'
 import GeneratingAnimation from '@/components/GeneratingAnimation.vue'
 import { type CodeGenStreamEvent } from '@/components/CodeGenViewer.vue'
 import aiAvatar from '@/assets/aiAvatar.png'
-import { API_BASE_URL, getStaticPreviewUrl } from '@/config/env'
+import { API_BASE_URL, getDeployUrl, getStaticPreviewUrl } from '@/config/env'
 import { VisualEditor, type ElementInfo } from '@/utils/visualEditor'
 
 import {
@@ -878,12 +878,21 @@ const closeCodeGenStream = () => {
 }
 
 // 更新预览
+// 优先级：已部署作品走 getDeployUrl（deployKey 存在 app_deploy_asset，持久化，跨会话/重启有效）；
+// 未部署时走 getStaticPreviewUrl（后端已将生成产物按 preview_{appId} 持久化到 app_deploy_asset，
+// 同样跨会话/重启有效，不再依赖 tmp/code_output 临时目录）。
 const updatePreview = async () => {
   if (!appId.value) {
     return
   }
-  const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
-  const newPreviewUrl = getStaticPreviewUrl(codeGenType, appId.value)
+  const deployKey = appInfo.value?.deployKey
+  let newPreviewUrl: string
+  if (deployKey) {
+    newPreviewUrl = getDeployUrl(deployKey)
+  } else {
+    const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
+    newPreviewUrl = getStaticPreviewUrl(codeGenType, appId.value)
+  }
   previewUrl.value = newPreviewUrl
   previewReady.value = true
 
@@ -967,6 +976,9 @@ const deployApp = async () => {
       deployUrl.value = res.data.data
       deployModalVisible.value = true
       message.success('部署成功')
+      // 部署成功后刷新应用信息，使 deployKey 生效，并立即切换预览为持久化部署 URL
+      await fetchAppInfo()
+      await updatePreview()
     } else {
       message.error('部署失败：' + res.data.message)
     }

@@ -47,6 +47,9 @@ public class VueProjectGenStreamManager {
     @Resource
     private VueProjectBuilder vueProjectBuilder;
 
+    @Resource
+    private com.xiaolou.xiaolouainocodebackend.service.AppService appService;
+
     /**
      * 生成会话缓存，key: appId:message
      */
@@ -199,7 +202,10 @@ public class VueProjectGenStreamManager {
 
                             if (buildSuccess) {
                                 detailSink.tryEmitNext(buildEvent(CodeGenStreamEventType.BUILD_END, null, null, null, null, null));
-                                String previewUrl = "/api/static/preview/vue_project_" + appId + "/dist/index.html";
+                                // 构建产物持久化到数据库，确保未部署时重新进入仍可预览
+                                File distDir = new File(projectPath + File.separator + "dist");
+                                appService.savePreviewAssets(appId, distDir);
+                                String previewUrl = "/api/static/preview_" + appId + "/dist/index.html";
                                 detailSink.tryEmitNext(buildEvent(CodeGenStreamEventType.PREVIEW_READY, null, null, null, null, previewUrl));
                             } else {
                                 detailSink.tryEmitNext(buildEvent(CodeGenStreamEventType.ERROR, null, null, null, "Vue 项目构建失败", null));

@@ -315,6 +315,32 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
     }
 
     /**
+     * 将应用生成产物持久化到数据库，作为「未部署时的预览资源」。
+     * 使用 deployKey = preview_{appId}，前端未部署时通过 /api/static/preview_{appId}/ 访问，
+     * 避免因 Railway 等无状态容器重建导致临时目录丢失而预览 404。
+     *
+     * @param appId     应用ID
+     * @param sourceDir 生成产物目录（HTML 为项目根目录，Vue 为 dist 目录）
+     */
+    @Override
+    public void savePreviewAssets(Long appId, File sourceDir) {
+        String deployKey = "preview_" + appId;
+        List<AppDeployAsset> assets = new ArrayList<>();
+        collectDeployAssets(deployKey, sourceDir, sourceDir, assets);
+        if (assets.isEmpty()) {
+            log.warn("预览资源为空，跳过写入，appId={}", appId);
+            return;
+        }
+        QueryWrapper<AppDeployAsset> deleteWrapper = new QueryWrapper<>();
+        deleteWrapper.eq("deploy_key", deployKey);
+        appDeployAssetMapper.delete(deleteWrapper);
+        for (AppDeployAsset asset : assets) {
+            appDeployAssetMapper.insert(asset);
+        }
+        log.info("预览资源已持久化到数据库，deployKey={}，文件数={}", deployKey, assets.size());
+    }
+
+    /**
      * 递归收集部署文件，生成 AppDeployAsset 列表。
      *
      * @param deployKey    部署标识

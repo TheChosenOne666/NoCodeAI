@@ -11,6 +11,7 @@ import com.xiaolou.xiaolouainocodebackend.model.vo.AppVO;
 import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 
+import java.io.File;
 import java.util.List;
 
 /**
@@ -88,4 +89,12 @@ public interface AppService extends IService<App> {
      * @param appUrl 应用访问URL
      */
     void generateAppScreenshotAsync(Long appId, String appUrl);
+
+    /**
+     * 将应用生成产物持久化到数据库，作为未部署时的预览资源。
+     *
+     * @param appId     应用ID
+     * @param sourceDir 生成产物目录（HTML 为项目根目录，Vue 为 dist 目录）
+     */
+    void savePreviewAssets(Long appId, File sourceDir);
 }
