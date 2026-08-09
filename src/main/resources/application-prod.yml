@@ -26,6 +26,7 @@ spring:
     redis:
       host: ${REDISHOST:localhost}
       port: ${REDISPORT:6379}
+      username: ${REDISUSER:}
       password: ${REDISPASSWORD:}
       database: 0
       ttl: 3600
