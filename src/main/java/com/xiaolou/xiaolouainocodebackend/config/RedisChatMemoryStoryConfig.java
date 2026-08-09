@@ -27,12 +27,13 @@ public class RedisChatMemoryStoryConfig {
 
     @Bean
     public RedisChatMemoryStore redisChatMemoryStory() {
-        return RedisChatMemoryStore.builder()
+        RedisChatMemoryStore.Builder builder = RedisChatMemoryStore.builder()
                 .host(host)
                 .port(port)
-                .user(username)
-                .password(password)
-                .ttl(ttl)
-                .build();
+                .ttl(ttl);
+        if (username != null && !username.isBlank()) {
+            builder = builder.user(username).password(password);
+        }
+        return builder.build();
     }
 }
