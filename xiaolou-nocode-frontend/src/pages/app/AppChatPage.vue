@@ -325,6 +325,8 @@ interface Message {
 
 const messages = ref<Message[]>([])
 const userInput = ref('')
+// 记录本次发送的原始输入，生成失败时恢复输入框以便重试，成功时清空
+const lastUserInput = ref('')
 const isGenerating = ref(false)
 const currentRequestId = ref('')
 const chatEventSource = ref<EventSource | null>(null)
@@ -553,9 +555,9 @@ const sendMessage = async () => {
     return
   }
 
-  // 立即锁定输入并清空，防止重复发送
+  // 锁定输入，防止重复发送（暂不立即清空输入框）
   isGenerating.value = true
-  userInput.value = ''
+  lastUserInput.value = rawInput
   await nextTick()
 
   let message = rawInput
@@ -701,6 +703,9 @@ const generateCode = async (userMessage: string, aiMessageIndex: number, request
       // Vue 项目的生成状态由代码实时展示流事件控制
       if (!isVueProject.value) {
         isGenerating.value = false
+        // 生成成功：清空输入框（失败场景在 business-error/handleError 中保留以便重试）
+        userInput.value = ''
+        lastUserInput.value = ''
       }
       eventSource?.close()
       chatEventSource.value = null
@@ -728,6 +733,8 @@ const generateCode = async (userMessage: string, aiMessageIndex: number, request
 
         streamCompleted = true
         isGenerating.value = false
+        // 生成失败：保留输入框内容以便用户重试
+        userInput.value = lastUserInput.value
         eventSource?.close()
       } catch (parseError) {
         console.error('解析错误事件失败:', parseError, '原始数据:', event.data)
@@ -756,6 +763,8 @@ const handleError = (error: unknown, aiMessageIndex: number) => {
   messages.value[aiMessageIndex].loading = false
   message.error('生成失败，请重试')
   isGenerating.value = false
+  // 生成失败：保留输入框内容以便用户重试
+  userInput.value = lastUserInput.value
 }
 
 // 启动 Vue 项目代码实时展示 SSE
@@ -830,24 +839,30 @@ const handleCodeGenStreamEvent = (streamEvent: CodeGenStreamEvent) => {
       break
     case 'preview-ready':
       if (streamEvent.url) {
-        // 将相对路径转为完整 URL，并加时间戳避免缓存
-        const previewFullUrl = streamEvent.url.startsWith('http')
-          ? streamEvent.url
-          : `${API_BASE_URL}${streamEvent.url.replace(/^\/api/, '')}`
-        const previewUrlWithCache = `${previewFullUrl}?t=${Date.now()}`
+        // 保持相对路径（与前端同源），否则跨域时无法访问 iframe.contentDocument，
+        // 导致可视化编辑模式（visualEditor 注入脚本）失效。加时间戳避免缓存。
+        const relativeUrl = streamEvent.url.startsWith('http')
+          ? streamEvent.url.replace(/^https?:\/\/[^/]+/, '')
+          : streamEvent.url
+        const previewUrlWithCache = `${relativeUrl}?t=${Date.now()}`
         vuePreviewUrl.value = previewUrlWithCache
         vuePreviewReady.value = true
         activeVueTab.value = 'preview'
         // 同时更新普通预览 URL，保持一致
-        previewUrl.value = previewFullUrl
+        previewUrl.value = relativeUrl
         previewReady.value = true
       }
       // 构建完成并可以预览，释放生成状态
       isGenerating.value = false
+      // 生成成功：清空输入框（失败场景在 error 分支保留以便重试）
+      userInput.value = ''
+      lastUserInput.value = ''
       break
     case 'error':
       isCodeGenBuilding.value = false
       isGenerating.value = false
+      // 生成失败：保留输入框内容以便用户重试
+      userInput.value = lastUserInput.value
       message.error(streamEvent.message || '生成失败')
       break
   }

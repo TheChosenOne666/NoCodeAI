@@ -19,8 +19,10 @@ export const getDeployUrl = (deployKey: string) => {
 }
 
 // 获取静态资源预览URL（从代码生成输出目录读取，与后端 StaticResourceController 的 /preview 路由对应）
+// 注意：使用相对路径 /api/... 而非 API_BASE_URL 绝对域名，保证预览 iframe 与前端页面同源，
+// 否则跨域时无法访问 iframe.contentDocument，导致可视化编辑模式（visualEditor 注入脚本）完全失效。
 export const getStaticPreviewUrl = (codeGenType: string, appId: string) => {
-  const baseUrl = `${STATIC_BASE_URL}/preview/${codeGenType}_${appId}/`
+  const baseUrl = `/api/static/preview/${codeGenType}_${appId}/`
   // 如果是 Vue 项目，浏览地址需要添加 dist 后缀
   if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {
     return `${baseUrl}dist/index.html`
