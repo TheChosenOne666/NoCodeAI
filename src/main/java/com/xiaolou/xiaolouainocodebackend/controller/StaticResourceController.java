@@ -38,7 +38,12 @@ public class StaticResourceController {
     public ResponseEntity<?> serveStaticResource(
             @PathVariable String deployKey,
             HttpServletRequest request) {
-        return serveFromRoot(PREVIEW_ROOT_DIR, "/static/" + deployKey, deployKey, request);
+        ResponseEntity<?> deployed = serveFromRoot(PREVIEW_ROOT_DIR, "/static/" + deployKey, deployKey, request);
+        // 部署目录与 DB 均未命中时，回退到生成输出目录（兼容旧前端 /api/static/{type}_{appId}/ 预览路径）
+        if (deployed.getStatusCode().value() == 404) {
+            return serveFromRoot(OUTPUT_ROOT_DIR, "/static/" + deployKey, deployKey, request);
+        }
+        return deployed;
     }
 
     /**

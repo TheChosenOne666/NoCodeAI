@@ -80,4 +80,18 @@ class StaticResourceControllerTest {
         ResponseEntity<?> response = controller.servePreviewResource("html_not_exist", request);
         assertEquals(404, response.getStatusCode().value());
     }
+
+    /** 兼容旧前端：直接请求 /api/static/{type}_{appId}/ 也应从 code_output 命中生成产物 */
+    @Test
+    void serveStaticResource_fallsBackToOutputDir_returnsGeneratedHtml() throws Exception {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setAttribute(
+                org.springframework.web.servlet.HandlerMapping.PATH_WITHIN_HANDLER_MAPPING_ATTRIBUTE,
+                "/static/html_123456/");
+        ResponseEntity<?> response = controller.serveStaticResource("html_123456", request);
+        assertEquals(200, response.getStatusCode().value());
+        assertTrue(response.getBody() instanceof org.springframework.core.io.Resource);
+        org.springframework.core.io.Resource body = (org.springframework.core.io.Resource) response.getBody();
+        assertTrue(Files.readString(body.getFile().toPath()).contains("preview test"));
+    }
 }
