@@ -117,6 +117,29 @@ Railway 容器文件系统为临时盘（ephemeral），容器重启后目录丢
 3. 点击"编辑模式"按钮 → 鼠标移到预览页面元素上应出现虚线选中框、点击元素右侧弹出编辑面板（验证跨域修复生效）。
 4. 输入框测试：输入一段提示词发送 → 生成成功后输入框应清空；若故意触发失败（如限流/网络断开），输入框应保留刚输入的内容以便重试。
 
+## Bug 修复：生产环境代码生成报 `Redis NOAUTH Authentication required`
+
+### 背景
+2026-08-09 单体项目部署上线后，前端发起代码生成请求（`/app/chat/gen/code`）时后端抛 `RuntimeException`，日志根因为 `redis.clients.jedis.exceptions.JedisAccessControlException: NOAUTH Authentication required.`。调用链：`AppController.chatToGenCode` → `AppServiceImpl.chatToGenCode` → `AiCodeGeneratorFacade.generateAndSaveCodeStream` → `MessageWindowChatMemory.messages` → `RedisChatMemoryStore.getMessages` → Jedis 连接 Redis 未认证。
+
+### 根因
+`RedisChatMemoryStoryConfig` 在构造 LangChain4j 的 `RedisChatMemoryStore` 时只注入了 `host / port / ttl`，未透传 `spring.data.redis` 的 `username / password`。生产 Redis 开启了密码认证，因此读取聊天记忆时连接被拒。
+- Spring 的 `StringRedisTemplate`（HTTP Session 存储）已正确读取 `spring.data.redis.password`，故登录态正常；
+- 唯独 LangChain4j 的聊天记忆存储由 `RedisChatMemoryStore` 独立建连，遗漏了密码，导致未授权错误。
+
+### 修复内容
+- `src/main/java/.../config/RedisChatMemoryStoryConfig.java`：
+  - 新增绑定字段 `username`、`password`（`@Value("${spring.data.redis.username:}")` / `"${spring.data.redis.password:}"`）；
+  - builder 增加 `.user(username).password(password)`，使记忆存储复用与 `spring.data.redis` 一致的账号密码。
+
+### 验证
+- 本地单体启动后端（依赖 Redis，如 `xiongda-redis` 容器），若该容器已设密码，前端发起代码生成应不再抛 `NOAUTH`；若本地 Redis 无密码，`.user/.password` 为空串，行为与修复前一致（向后兼容）。
+- 生产验证：重新构建镜像部署后，前端发起对话生成代码，后端日志不再出现 `JedisAccessControlException: NOAUTH`；`/api/app/chat/gen/code` 正常返回 SSE 片段。
+
+### 破坏性变更提示
+- 无公开接口签名变更。
+- 仅在 Redis 启用密码的生产环境修复认证缺失；本地无密码 Redis 不受影响。
+
 ## M6 站点流量统计（友盟+ U-Web，仅平台前端）
 
 ### 背景
