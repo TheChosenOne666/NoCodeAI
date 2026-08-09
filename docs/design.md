@@ -86,6 +86,10 @@ getDeployUrl(deployKey) = `${API_BASE_URL}/static/${deployKey}/`
   跨域时该属性为 `null`（同源策略），脚本注入被静默吞掉，编辑模式完全失效。量产环境前端在 Cloudflare（`xiaolou-nocode.pages.dev`）、
   预览 iframe 若用 `VITE_API_BASE_URL` 拼接的绝对 Railway 域名则跨域。修复：`getStaticPreviewUrl` 与 `AppChatPage.vue` 的
   `preview-ready` 分支均改为**相对路径** `/api/static/preview/...`，保证 iframe 与前端页面同源。API 请求（fetch/EventSource）仍用 `API_BASE_URL` 绝对域名，不受影响。
+- **Cloudflare Pages rewrite（2026-08-10 补充）**：相对路径 `/api/static/preview/...` 在生产环境会命中 Cloudflare Pages 的静态托管，
+  而 Pages 上不存在该目录，会 fallback 返回前端 `index.html`，导致预览显示平台首页。修复：在 `public/_redirects` 添加
+  `200` rewrite 规则，把 `/api/static/preview/*` 代理到 Railway 后端 `https://nocodeai-production.up.railway.app/api/static/preview/:splat`。
+  状态码 `200` 为透明代理，用户/iframe 无感知，仍保持与前端页面同源，编辑模式继续可用。
 
 ### 9. 输入框清空 / 保留策略（2026-08-09）
 - **场景**：应用聊天页发送提示词后，期望"生成成功则清空输入框、生成失败则保留输入以便重试"。

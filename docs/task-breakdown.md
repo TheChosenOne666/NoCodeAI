@@ -117,6 +117,38 @@ Railway 容器文件系统为临时盘（ephemeral），容器重启后目录丢
 3. 点击"编辑模式"按钮 → 鼠标移到预览页面元素上应出现虚线选中框、点击元素右侧弹出编辑面板（验证跨域修复生效）。
 4. 输入框测试：输入一段提示词发送 → 生成成功后输入框应清空；若故意触发失败（如限流/网络断开），输入框应保留刚输入的内容以便重试。
 
+## M7-2 Cloudflare Pages 生产环境预览显示为平台首页
+
+### 背景
+M7-1 把预览 iframe `src` 改为相对路径 `/api/static/preview/...` 后，编辑模式跨域问题修复。但在 Cloudflare Pages 生产环境部署后，右侧预览 iframe 显示为平台首页（No Code 零代码导航条），而非生成的网页。
+
+### 根因
+Cloudflare Pages 是纯静态托管，当前端请求相对路径 `/api/static/preview/...` 时，Pages 找不到该路径对应的静态文件，会按默认行为 fallback 返回前端 `index.html`，于是 iframe 加载的是平台首页。
+
+本地开发时 Vite dev server 会把 `/api/...` 代理到 Java 后端；生产环境没有自动代理，需要显式把该路径 rewrite 到 Railway 后端。
+
+### 修复内容
+在前端 `public/_redirects` 添加 Cloudflare Pages rewrite 规则：
+
+```txt
+/api/static/preview/*  https://nocodeai-production.up.railway.app/api/static/preview/:splat  200
+```
+
+- 状态码 `200` 表示 rewrite（透明代理），用户无感知，且 iframe 仍与前端页面同源，`contentDocument` 可访问。
+- 构建后 `dist/_redirects` 会随前端产物一起部署到 Cloudflare Pages。
+
+### 进度
+- [x] 新增 `public/_redirects` 预览路径 rewrite 规则
+- [x] 重新构建验证 `dist/_redirects` 已生成
+- [x] 文档沉淀（本节）
+- [ ] 生产验证（步骤见下）
+
+### 联调步骤
+1. 将新的 `dist/` 目录手动上传到 Cloudflare Pages（或触发 git 部署）。
+2. 浏览器打开平台 → 进入应用聊天页 → 生成 HTML/Vue 代码。
+3. DevTools → Network 中观察预览 iframe 请求的 URL 仍为 `/api/static/preview/<type>_<appId>/...`（同源），但响应内容应是后端生成的网页，状态 200。
+4. 若仍显示平台首页，检查 Cloudflare Pages 部署是否包含 `dist/_redirects`，或规则目标域名是否仍为当前 Railway 生产域名。
+
 ## Bug 修复：生产环境代码生成报 `Redis NOAUTH Authentication required`
 
 ### 背景
