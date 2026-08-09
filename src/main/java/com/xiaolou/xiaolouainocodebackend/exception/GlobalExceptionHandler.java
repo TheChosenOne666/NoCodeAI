@@ -35,11 +35,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(RuntimeException.class)
     public BaseResponse<?> runtimeExceptionHandler(RuntimeException e) {
         log.error("RuntimeException", e);
+        // 临时诊断：暴露异常类名与简要消息，便于线上定位根因
+        String diagnostic = e.getClass().getSimpleName() + ": " + e.getMessage();
         // 尝试处理 SSE 请求
-        if (handleSseError(ErrorCode.SYSTEM_ERROR.getCode(), "系统错误")) {
+        if (handleSseError(ErrorCode.SYSTEM_ERROR.getCode(), diagnostic)) {
             return null;
         }
-        return ResultUtils.error(ErrorCode.SYSTEM_ERROR, "系统错误");
+        return ResultUtils.error(ErrorCode.SYSTEM_ERROR, diagnostic);
     }
 
     /**

@@ -296,10 +296,10 @@ public class AppController {
         User loginUser = userService.getLoginUser(request);
         // 调用服务生成代码（流式）
         Flux<String> contentFlux = appService.chatToGenCode(appId, message, requestId, loginUser);
-        return contentFlux.map(
+        return contentFlux                .map(
                 chunk -> {
-                    //将内容包装成json对象
-                    Map<String, String> wrapper = Map.of("d", chunk);
+                    //将内容包装成json对象（字段名 data 与前端 StreamMessage 对齐）
+                    Map<String, String> wrapper = Map.of("data", chunk);
                     String jsonData = JSONUtil.toJsonStr(wrapper);
                     return ServerSentEvent.<String>builder().data(jsonData).build();
                 })
