@@ -110,6 +110,7 @@ Railway 容器文件系统为临时盘（ephemeral），容器重启后目录丢
 - [x] `AppChatPage.vue` `updatePreview` 注释更新（未部署也持久化查库）；`preview-ready` 分支复用 `getStaticPreviewUrl`
 - [x] 后端 Maven 编译通过（`mvn -q -o compile`）
 - [x] 前端 type-check 通过（`vue-tsc --noEmit`）
+- [x] 修复循环依赖：`AiCodeGeneratorFacade` 与 `VueProjectGenStreamManager` 注入 `AppService` 加 `@Lazy`，解决 Railway 启动失败
 - [ ] 前后端重新部署 + 联调（步骤见下）
 
 ### 联调步骤
