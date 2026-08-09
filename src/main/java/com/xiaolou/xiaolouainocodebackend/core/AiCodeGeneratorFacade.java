@@ -13,6 +13,7 @@ import com.xiaolou.xiaolouainocodebackend.model.enums.CodeGenTypeEnum;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
@@ -31,6 +32,7 @@ public class AiCodeGeneratorFacade {
     @Resource
     private VueProjectGenStreamManager vueProjectGenStreamManager;
 
+    @Lazy
     @Resource
     private com.xiaolou.xiaolouainocodebackend.service.AppService appService;
 

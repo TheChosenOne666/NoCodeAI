@@ -20,6 +20,7 @@ import dev.langchain4j.service.tool.ToolExecution;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.codec.ServerSentEvent;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -47,6 +48,7 @@ public class VueProjectGenStreamManager {
     @Resource
     private VueProjectBuilder vueProjectBuilder;
 
+    @Lazy
     @Resource
     private com.xiaolou.xiaolouainocodebackend.service.AppService appService;
 
