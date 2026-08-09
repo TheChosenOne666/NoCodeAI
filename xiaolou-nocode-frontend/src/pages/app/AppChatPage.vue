@@ -837,21 +837,22 @@ const handleCodeGenStreamEvent = (streamEvent: CodeGenStreamEvent) => {
     case 'build-end':
       isCodeGenBuilding.value = false
       break
-    case 'preview-ready':
-      if (streamEvent.url) {
-        // 保持相对路径（与前端同源），否则跨域时无法访问 iframe.contentDocument，
-        // 导致可视化编辑模式（visualEditor 注入脚本）失效。加时间戳避免缓存。
-        const relativeUrl = streamEvent.url.startsWith('http')
-          ? streamEvent.url.replace(/^https?:\/\/[^/]+/, '')
-          : streamEvent.url
-        const previewUrlWithCache = `${relativeUrl}?t=${Date.now()}`
-        vuePreviewUrl.value = previewUrlWithCache
-        vuePreviewReady.value = true
-        activeVueTab.value = 'preview'
-        // 同时更新普通预览 URL，保持一致
-        previewUrl.value = relativeUrl
-        previewReady.value = true
-      }
+    case 'preview-ready': {
+      // 统一使用 getStaticPreviewUrl 生成预览地址，保证：
+      // 1) 路径与后端 /api/static/preview/{type}_{appId}/ 路由一致（线上 Functions 只代理该前缀）
+      // 2) 相对路径与前端同源，否则跨域时无法访问 iframe.contentDocument，
+      //    导致可视化编辑模式（visualEditor 注入脚本）完全失效。
+      const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
+      const newPreviewUrl = getStaticPreviewUrl(codeGenType, appId.value)
+      const previewUrlWithCache = `${newPreviewUrl}?t=${Date.now()}`
+      vuePreviewUrl.value = previewUrlWithCache
+      vuePreviewReady.value = true
+      activeVueTab.value = 'preview'
+      // 同时更新普通预览 URL，保持一致
+      previewUrl.value = newPreviewUrl
+      previewReady.value = true
+      break
+    }
       // 构建完成并可以预览，释放生成状态
       isGenerating.value = false
       // 生成成功：清空输入框（失败场景在 error 分支保留以便重试）

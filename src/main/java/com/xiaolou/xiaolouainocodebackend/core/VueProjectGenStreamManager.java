@@ -199,7 +199,7 @@ public class VueProjectGenStreamManager {
 
                             if (buildSuccess) {
                                 detailSink.tryEmitNext(buildEvent(CodeGenStreamEventType.BUILD_END, null, null, null, null, null));
-                                String previewUrl = "/api/static/vue_project_" + appId + "/dist/index.html";
+                                String previewUrl = "/api/static/preview/vue_project_" + appId + "/dist/index.html";
                                 detailSink.tryEmitNext(buildEvent(CodeGenStreamEventType.PREVIEW_READY, null, null, null, null, previewUrl));
                             } else {
                                 detailSink.tryEmitNext(buildEvent(CodeGenStreamEventType.ERROR, null, null, null, "Vue 项目构建失败", null));
