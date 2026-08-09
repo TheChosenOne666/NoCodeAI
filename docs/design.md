@@ -101,11 +101,13 @@ getDeployUrl(deployKey) = `${API_BASE_URL}/static/${deployKey}/`
   跨域时该属性为 `null`（同源策略），脚本注入被静默吞掉，编辑模式完全失效。量产环境前端在 Cloudflare（`xiaolou-nocode.pages.dev`）、
   预览 iframe 若用 `VITE_API_BASE_URL` 拼接的绝对 Railway 域名则跨域。修复：`getStaticPreviewUrl` 与 `AppChatPage.vue` 的
   `preview-ready` 分支均改为**相对路径** `/api/static/preview/...`，保证 iframe 与前端页面同源。API 请求（fetch/EventSource）仍用 `API_BASE_URL` 绝对域名，不受影响。
-- **Cloudflare Pages rewrite（2026-08-10 补充）**：相对路径 `/api/static/preview/...` 在生产环境会命中 Cloudflare Pages 的静态托管，
+- **Cloudflare Pages rewrite（2026-08-10）**：相对路径 `/api/static/preview/...` 在生产环境会命中 Cloudflare Pages 的静态托管，
   而 Pages 上不存在该目录，会 fallback 返回前端 `index.html`，导致预览显示平台首页。
-  **注意**：改造后未部署预览路径变为 `/api/static/preview_{appId}/`（前缀仍是 `/api/static/preview/`），已由既有 rewrite 规则覆盖，无需新增。
   修复：在 `public/_redirects` 添加 `200` rewrite 规则，把 `/api/static/preview/*` 代理到 Railway 后端
   `https://nocodeai-production.up.railway.app/api/static/preview/:splat`。状态码 `200` 为透明代理，用户/iframe 无感知，仍保持同源，编辑模式继续可用。
+- **Cloudflare Pages rewrite 修正（2026-08-10 补充）**：未部署预览路径改为 `/api/static/preview_{appId}/` 后，
+  原规则 `/api/static/preview/*` 因 `preview` 后紧跟下划线而非斜杠，无法匹配新路径，导致请求仍被 Pages 自身处理而 404/200 fallback。
+  修复：规则放宽为 `/api/static/*`，代理全部 `/api/static/` 子路径到 Railway 后端，同时覆盖部署访问 `/api/static/{deployKey}/`。
 - **前端访问优先级（`AppChatPage.vue` `updatePreview`）**：已部署（`appInfo.deployKey` 存在）→ `getDeployUrl(deployKey)`；
   未部署 → `getStaticPreviewUrl(codeGenType, appId)`（即 `/api/static/preview_{appId}/`）。两种情况均查库，持久化有效。
 

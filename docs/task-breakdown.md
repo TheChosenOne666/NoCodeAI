@@ -111,6 +111,7 @@ Railway 容器文件系统为临时盘（ephemeral），容器重启后目录丢
 - [x] 后端 Maven 编译通过（`mvn -q -o compile`）
 - [x] 前端 type-check 通过（`vue-tsc --noEmit`）
 - [x] 修复循环依赖：`AiCodeGeneratorFacade` 与 `VueProjectGenStreamManager` 注入 `AppService` 加 `@Lazy`，解决 Railway 启动失败
+- [x] 修正 Cloudflare `_redirects`：规则由 `/api/static/preview/*` 改为 `/api/static/*`，匹配新的 `/api/static/preview_{appId}/` 路径
 - [ ] 前后端重新部署 + 联调（步骤见下）
 
 ### 联调步骤
