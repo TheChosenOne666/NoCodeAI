@@ -66,6 +66,32 @@ getDeployUrl(deployKey) = `${API_BASE_URL}/static/${deployKey}/`
 ```
 前端无需改动；生产环境访问 `/api/static/{deployKey}/` 由后端自动从 DB 取作品返回。
 
+### 8. 生成后即时预览（/api/static/preview）
+- **场景**：用户在对话中生成 HTML/Vue 代码后，右侧"生成后的网页展示"iframe 需要即时预览刚生成的作品。
+- **落盘位置**：生成流程（`AiCodeGeneratorFacade.processCodeStream` 的 `doOnComplete`）把作品写入
+  `CODE_OUTPUT_ROOT_DIR/{codeGenType}_{appId}/index.html`，其中 `CODE_OUTPUT_ROOT_DIR = user.dir/tmp/code_output`。
+- **早期 404 根因**：原预览 URL 指向 `/api/static/{codeGenType}_{appId}/`，由 `StaticResourceController.serveStaticResource`
+  从 `PREVIEW_ROOT_DIR = CODE_DEPLOY_ROOT_DIR`（`user.dir/tmp/code_deploy`）读取；但生成代码在 `code_output`、
+  部署资源在 `code_deploy`，**两目录分离**导致预览永远 404（本地因目录曾一致而偶发可用，生产环境稳定复现）。
+- **修复（2026-08-09）**：新增独立预览路由 `GET /api/static/preview/{sourceDir}/**`，由
+  `StaticResourceController.servePreviewResource` 从 `CODE_OUTPUT_ROOT_DIR` 读取；
+  前端 `getStaticPreviewUrl` 改为返回 `/api/static/preview/{codeGenType}_{appId}/`。
+  抽取 `serveFromRoot(rootDir, prefix, dbKey, request)` 共用逻辑，预览分支**不查库**（预览内容来自生成输出目录，非持久化部署资源）。
+- **注意（Railway 临时盘）**：`CODE_OUTPUT_ROOT_DIR` 同样位于 Railway 临时文件系统，容器重启 / 新实例会清空，
+  因此「即时预览」仅在**同一次运行、生成后立即查看**有效；跨重启预览需重新生成或走部署流程（写 `code_deploy` + 查库回退）。
+- **前端改动**：`xiaolou-nocode-frontend/src/config/env.ts` 的 `getStaticPreviewUrl` 路径前缀由 `/static/` 改为 `/static/preview/`。
+- **旧路径兼容（2026-08-09 补充）**：`serveStaticResource` 在部署目录与 DB 均 404 时，回退到 `CODE_OUTPUT_ROOT_DIR/{deployKey}` 读取，
+  使**未更新前端的旧请求** `/api/static/{type}_{appId}/` 也能预览，避免前端未部署时预览失效。
+- **编辑模式需同源（2026-08-09 补充）**：可视化编辑（`VisualEditor` 向预览 iframe 注入脚本）依赖 `iframe.contentDocument`，
+  跨域时该属性为 `null`（同源策略），脚本注入被静默吞掉，编辑模式完全失效。量产环境前端在 Cloudflare（`xiaolou-nocode.pages.dev`）、
+  预览 iframe 若用 `VITE_API_BASE_URL` 拼接的绝对 Railway 域名则跨域。修复：`getStaticPreviewUrl` 与 `AppChatPage.vue` 的
+  `preview-ready` 分支均改为**相对路径** `/api/static/preview/...`，保证 iframe 与前端页面同源。API 请求（fetch/EventSource）仍用 `API_BASE_URL` 绝对域名，不受影响。
+
+### 9. 输入框清空 / 保留策略（2026-08-09）
+- **场景**：应用聊天页发送提示词后，期望"生成成功则清空输入框、生成失败则保留输入以便重试"。
+- **实现**：`sendMessage` 发送时不再立即清空，仅记录 `lastUserInput`；成功路径（`done` 事件 / Vue `preview-ready`）置 `userInput = ''`；
+  失败路径（`business-error` / `handleError` / Vue `error`）恢复 `userInput = lastUserInput`，并释放 `isGenerating` 锁。
+
 ### 5. 导入脚本
 `tmp_import/import_featured_assets.js`（Node + mysql2）：
 - 仅导入 7 个精品案例 deployKey：`H0wUnd, wLxkTw, r7BaUv, I00Oyc, jkJ12P, WVsVTS, rpkcN3`

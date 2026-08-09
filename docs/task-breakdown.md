@@ -61,6 +61,62 @@ Railway 容器文件系统为临时盘（ephemeral），容器重启后目录丢
 4. 生产验证：无本地盘环境直接走 DB 路径；浏览器应正常全屏展示作品，不再白屏/下载。
 5. 排错：若 404，查库 `SELECT deploy_key,file_path,file_size FROM app_deploy_asset WHERE is_delete=0;` 应含对应记录，缺失则重跑导入脚本。
 
+## M7 生成后即时预览修复（/api/static/preview）
+
+### 背景
+对话生成 HTML/Vue 代码后，右侧"生成后的网页展示"iframe 预览请求 `/api/static/{codeGenType}_{appId}/` 在生产环境稳定返回 404。
+根因：生成代码落盘于 `CODE_OUTPUT_ROOT_DIR`（`tmp/code_output`），而预览路由 `serveStaticResource` 从 `CODE_DEPLOY_ROOT_DIR`（`tmp/code_deploy`）读取——两目录分离。部署资源与生成输出本就分目录，原设计把预览也指向部署目录是错误耦合。
+
+### 需求描述
+1. 新增独立预览路由 `GET /api/static/preview/{sourceDir}/**`，从 `CODE_OUTPUT_ROOT_DIR` 读取生成产物。
+2. 抽取 `serveFromRoot(rootDir, prefix, dbKey, request)` 共用逻辑，部署资源保留 DB 回退，预览分支不查库。
+3. 前端 `getStaticPreviewUrl` 改为 `/api/static/preview/{codeGenType}_{appId}/`，Vue 项目仍追加 `dist/index.html`。
+4. 不影响部署/`getDeployUrl` 逻辑。
+
+### 进度
+- [x] `StaticResourceController` 新增 `servePreviewResource` + 抽取 `serveFromRoot`
+- [x] 前端 `env.ts` 的 `getStaticPreviewUrl` 路径前缀改为 `/static/preview/`
+- [x] `serveStaticResource` 404 时回退 `code_output`（兼容未部署前端）/api/static/{type}_{appId}/ 旧路径
+- [x] 单测 `StaticResourceControllerTest`（命中返回 Resource、缺失返回 404、旧路径回退命中），3 例全过
+- [x] 后端 Maven 编译通过（`mvn -q -o compile`）
+- [ ] 前后端联调（步骤见下）
+
+### 联调步骤
+1. 后端重新部署到 Railway（代码已推 NoCodeAI/main 的对应修复提交）。
+2. 前端重新构建部署（Cloudflare Pages：xiaolou-nocode.pages.dev，确认其部署源与本次改动同步）。
+3. 浏览器打开平台 → 进入任一应用聊天页 → 生成一段 HTML 代码。
+4. DevTools → Network 观察预览 iframe 请求应为 `https://nocodeai-production.up.railway.app/api/static/preview/html_<appId>/`，状态 200 且返回生成的 HTML。
+5. 排错：若仍 404，去 Railway 后端 Logs 搜 `保存成功，路径为：` 确认文件落盘目录；对比预览请求的实际路径是否一致（应为 `code_output/html_<appId>`）。
+
+## M7-1 前端编辑模式失效修复 + 输入框清空/保留逻辑
+
+### 背景
+生产环境（前端 Cloudflare `xiaolou-nocode.pages.dev`，后端 Railway `nocodeai-production.up.railway.app`）下，点击应用聊天页"编辑模式"按钮无任何反应、鼠标无变化；且发送消息后输入框内容在生成结束后仍保留。
+
+### 根因
+1. **编辑模式跨域失效**：预览 iframe 的 `src` 由各环境 `VITE_API_BASE_URL`（生产为 `https://nocodeai-production.up.railway.app/api`）拼接成绝对域名 URL。前端页面托管在 Cloudflare 域，iframe 指向 Railway 域 → 跨域 → `iframe.contentDocument` 为 `null`（同源策略保护）→ `VisualEditor.injectEditScript` 注入脚本时 `waitForIframeLoad` 进入 `catch` 被静默吞掉，脚本永远注入不了，编辑模式完全失效。本地开发 `.env.development` 用 `/api` 相对路径，同源所以本地正常、生产失效。
+2. **输入框清空时机错误**：原 `sendMessage` 在发送瞬间立即 `userInput.value = ''`，无论生成成功或失败都清空。需求是"生成成功清空、生成失败保留以便重试"。
+
+### 需求描述
+1. 预览 iframe 的 `src` 改为**相对路径** `/api/static/...`，保证与前端页面同源，恢复 `contentDocument` 访问，使 `VisualEditor` 脚本可注入。
+2. 涉及位置：`env.ts` 的 `getStaticPreviewUrl`（去掉 `API_BASE_URL` 前缀，直接返回 `/api/static/preview/...`）；`AppChatPage.vue` 的 `handleCodeGenStreamEvent` 的 `preview-ready` 分支（原把 `streamEvent.url` 拼成 `API_BASE_URL` 绝对域名）改为保留相对路径。
+3. 输入框逻辑：发送时不立即清空，记录 `lastUserInput`；生成成功（`done` / Vue `preview-ready`）清空 `userInput`；生成失败（`business-error` / `handleError` / Vue `error`）恢复 `userInput = lastUserInput`。
+
+### 进度
+- [x] `env.ts` `getStaticPreviewUrl` 改相对路径
+- [x] `AppChatPage.vue` `preview-ready` 分支改相对路径（含 `?t=` 时间戳防缓存）
+- [x] `AppChatPage.vue` 新增 `lastUserInput` ref，`sendMessage` 不再立即清空
+- [x] 成功路径（`done` / `preview-ready`）清空 `userInput`；失败路径（`business-error` / `handleError` / `error`）恢复 `userInput`
+- [x] 前端 type-check + build 通过（`npm run build`）
+- [x] 已 commit `0fd84a0` 并 push `nocode/master`（Cloudflare 自动部署）
+- [ ] 前后端联调（步骤见下）
+
+### 联调步骤
+1. Cloudflare Pages 部署完成后，浏览器打开平台前端（生产 `xiaolou-nocode.pages.dev` 或本地 `npm run dev`）。
+2. 进入任一应用聊天页 → 生成一段 HTML/Vue 代码 → 等待右侧预览 iframe 加载完成。
+3. 点击"编辑模式"按钮 → 鼠标移到预览页面元素上应出现虚线选中框、点击元素右侧弹出编辑面板（验证跨域修复生效）。
+4. 输入框测试：输入一段提示词发送 → 生成成功后输入框应清空；若故意触发失败（如限流/网络断开），输入框应保留刚输入的内容以便重试。
+
 ## M6 站点流量统计（友盟+ U-Web，仅平台前端）
 
 ### 背景
