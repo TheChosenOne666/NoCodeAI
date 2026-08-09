@@ -1,81 +1,92 @@
 # 设计文档
 
-## 部署产物持久化（COS）
+## SSE 错误处理与编码规范
+
+### 1. 场景
+`/app/chat/gen/code` 返回 `text/event-stream`，用于实时推送 AI 生成的代码片段。当 AI 调用失败或发生未预期异常时，后端通过 `GlobalExceptionHandler` 写入 `business-error` 事件，前端监听并展示错误。
+
+### 2. 数据格式
+- 正常片段：`data: {"type":"ai_response","data":"<代码片段>"}\n\n`
+- 业务错误：`event: business-error\ndata: {"error":true,"code":50000,"message":"系统错误"}\n\n`
+- 结束：`event: done\ndata: {}\n\n`
+
+### 3. 编码约定
+- 后端写入 SSE 前必须先调用 `response.setCharacterEncoding("UTF-8")`，再设置 `Content-Type: text/event-stream;charset=UTF-8`，否则中文字符在客户端可能解码为乱码。
+- 前端解析 `data` 字段（而非 `d`），按 `parsed.data` 追加内容。
+
+### 4. 错误处理
+- 后端：`RuntimeException` 等未预期异常统一返回"系统错误"，避免把底层异常详情暴露给前端；具体堆栈记录到服务端日志。
+- 前端：`business-error` 事件展示具体 message；`EventSource.onerror` 触发时视为连接异常，直接显示"生成失败，请重试"，不将 CONNECTING 状态误判为正常关闭。
+
+### 5. 模型配置
+- 本地开发默认模型通过 `application-local.yml` 的 `spring.ai.openai.model-name` 指定，当前默认值为 `deepseek-v4-flash-ga-260731`，支持 `CHAT_MODEL` 环境变量覆盖。
+- 若模型 ID 失效，火山引擎会返回 `InvalidEndpointOrModel.NotFound`，前端表现为"系统错误"。
+
+## 精品案例作品持久化（MySQL）
 
 ### 1. 架构决策
-- **源码/产物存对象存储**：腾讯云 COS（公有读），而非本地临时盘或 PostgreSQL BLOB。
-- **前端直接引 COS 静态网站直链**：`{COS_DEPLOY_HOST}/code-deploy/{deployKey}/`，其中 `COS_DEPLOY_HOST` 必须是 **cos-website 域名**（`*.cos-website.ap-shanghai.myqcloud.com`），不经 Java 代理，支持全屏、可被他人访问。
-- **为何用 cos-website 而非默认域名**：腾讯云 2024-01 后新建桶的默认域名（`*.cos.ap-shanghai.myqcloud.com`）强制返回 `Content-Disposition: attachment` + `x-cos-force-download: true`，浏览器会下载而非展示（且无备案域名无法关闭该策略）。cos-website 静态网站域名不带强制下载头，且会自动补 `index.html`，是免备案的展示方案。
-- **回退策略**：COS 未配置时（`cosManager == null`，条件 bean 不创建）回退本地盘，保证本地开发与异常环境可运行。
+- **精品案例作品存 MySQL**：新增 `app_deploy_asset` 表，将已部署的精品案例前端产物（dist 文件）按文件入库，而非依赖本地临时盘或 COS。
+- **为何不依赖本地盘**：生产环境（Railway）文件系统为临时盘（ephemeral），容器重启后 `tmp/code_deploy` 目录丢失，导致"查看作品"返回 404/白屏。
+- **为何不用 COS**：腾讯云 2024-01 后新建桶默认域名及 cos-website 域名均强制 `Content-Disposition: attachment`，浏览器会下载而非展示；Cloudflare Worker 代理方案在国内被墙（workers.dev 无法访问）。经评估后采用 MySQL 直存方案，最稳、零额外基础设施依赖。
+- **回退策略**：`StaticResourceController` 优先读本地盘（本地开发体验不变），本地盘不存在时回退查 `app_deploy_asset` 表，前端 URL 逻辑无需任何改动。
+- **适用范围**：仅导入精品案例（`app.priority = 99` 的 7 个作品）。普通用户部署的作品仍走本地盘 / 后续部署流程，不强制入库（避免 BLOB 体积膨胀）。
 
-### 2. COS 对象键约定
-| 用途 | 前缀 | 示例 |
+### 2. 表结构（app_deploy_asset）
+| 列 | 类型 | 说明 |
 |---|---|---|
-| 部署产物（dist） | `code-deploy/{deployKey}/` | `code-deploy/vue_123/index.html` |
-| 生成源码 | `code-source/{codeGenType}_{appId}/` | `code-source/vue_123/src/App.vue` |
+| id | BIGINT PK AUTO | 主键 |
+| deploy_key | VARCHAR(64) | 部署标识，对应 `app.deployKey` |
+| file_path | VARCHAR(512) | 文件相对路径，如 `index.html` / `assets/xxx.js` |
+| content_type | VARCHAR(128) | MIME 类型 |
+| file_size | BIGINT | 字节数 |
+| content | LONGBLOB | 文件二进制内容 |
+| create_time / update_time | DATETIME | 时间戳 |
+| is_delete | TINYINT | 逻辑删除 |
 
-`deployKey = {codeGenType}_{appId}`，与前端 `getDeployUrl(deployKey)` 拼接一致。
+建表 SQL：`ai-no-code-app/src/main/resources/sql/app_deploy_asset.sql`。
 
 ### 3. 关键流程
 
-#### 3.1 deployApp（部署）
+#### 3.1 StaticResourceController.serveStaticResource（查看作品）
 ```
-1. 校验权限（仅 owner）
-2. 取 deployKey = codeGenType + "_" + appId
-3. 本地构建 Vue 项目（vue_project_{appId}）→ dist
-4. 源目录存在性检查（本地 code_output 或 vue_project）
-5. COS 可用：uploadDir("code-deploy/"+deployKey, dist)，返回 buildPublicUrl("code-deploy/"+deployKey+"/index.html")
-   COS 不可用：复制到 CODE_DEPLOY_ROOT_DIR/{deployKey}，返回 CODE_DEPLOY_HOST/{deployKey}/
-6. 更新 app.deployKey / deployedTime
-7. 异步生成封面截图
+1. 解析 deployKey 与资源相对路径
+2. 目录访问（无尾斜杠）→ 301 重定向到带 / 的 URL
+3. 默认路径 → index.html
+4. 本地盘命中（PREVIEW_ROOT_DIR/{deployKey}/{path} 存在）→ 直接返回文件
+5. 本地盘未命中 → 查 app_deploy_asset 表（deploy_key + file_path）
+   - 命中：以 ByteArrayResource + content_type 返回二进制内容
+   - 未命中：404
 ```
+注意：因 `map-underscore-to-camel-case: false`，实体字段用 `@TableField` 显式映射列名。
 
-#### 3.2 removeById（删除应用）
-```
-1. 查 app.deployKey / codeGenType
-2. cosManager.deleteDir("code-deploy/"+deployKey)
-3. cosManager.deleteDir("code-source/"+codeGenType+"_"+appId)
-4. 删对话历史 → 删 app
-```
-异常仅记日志，不阻断删除。
-
-#### 3.3 生成完成自动同步
-`VueProjectGenStreamManager` 生成完成后，若 app 已部署过且存在 dist，自动 `uploadDir` 到 COS（或回退本地盘），保证"查看作品"展示最新内容。
-
-### 4. 前端预览 URL
+### 4. 前端预览 URL（不变）
 `env.ts`：
 ```
 getDeployUrl(deployKey) = `${API_BASE_URL}/static/${deployKey}/`
 ```
-实时预览（生成中）仍走 `/api/static`（getStaticPreviewUrl），不变。
+前端无需改动；生产环境访问 `/api/static/{deployKey}/` 由后端自动从 DB 取作品返回。
 
-### 5. 配置项
-| 配置 | 说明 |
-|---|---|
-| `cos.client.host` | COS 公有读域名，同时作为预览域名 |
-| `cos.client.accessKey` / `secretKey` / `region` / `bucket` | COS 凭证 |
-| `CODE_DEPLOY_HOST` | JVM 系统属性覆盖预览域名（已废弃硬编码 localhost） |
-| `VITE_COS_DEPLOY_HOST` | 前端构建期注入的 COS 公有读域名 |
-| `migrate.cos.deploy` | 一次性迁移开关（true 触发本地→COS 迁移） |
+### 5. 导入脚本
+`tmp_import/import_featured_assets.js`（Node + mysql2）：
+- 仅导入 7 个精品案例 deployKey：`H0wUnd, wLxkTw, r7BaUv, I00Oyc, jkJ12P, WVsVTS, rpkcN3`
+- 递归读取 `tmp/code_deploy/{deployKey}` 下所有文件，规范化路径（统一 `/`），按扩展名推断 content_type
+- 先 `DELETE FROM app_deploy_asset WHERE deploy_key = ?` 再 `INSERT`，保证幂等可重跑
+- 运行前先执行建表 SQL（IF NOT EXISTS 幂等）
+- 运行：`cd tmp_import && npm i mysql2 && node import_featured_assets.js`
+- 数据库连接：host=localhost, port=3306, user=root, password=123456, database=nocode（与 application.yml 一致）
 
-### 6. 一次性迁移
-`CosDeployMigrationRunner`（`@ConditionalOnProperty(migrate.cos.deploy=true)`）：
-遍历本地 `tmp/code_deploy/*` 目录，递归上传到 `code-deploy/{deployKey}/`。
-执行后日志打印 `[迁移完成] 共处理 N 个 deployKey`，随后移除该配置重新部署。
-注意：App 表中 deployKey 需与生产环境一致，前端才能拼出正确直链。
+当前已导入 38 个文件（截至 2026-08-09）。
 
-### 7. 破坏性变更提示
-- 前端 `getDeployUrl` 行为变更：配置了 `VITE_COS_DEPLOY_HOST` 后，预览地址从 `/api/static/{deployKey}/` 变为 COS 直链。
-- 删除应用会同步删 COS 资源（不可恢复），删除前需确认。
+### 6. 破坏性变更提示
+- 无前端/公开接口签名变更，`getDeployUrl` 行为不变。
+- 新增数据库表 `app_deploy_asset`，需在部署前执行建表 SQL。
+- 删除应用目前不会级联清 `app_deploy_asset`（精品案例为固定数据，删除风险低；如需要可后续补 `removeById` 清理）。
 
-### 8. 生产环境部署要点
-- 后端 `cos.client.*` 配置已通过 Railway 环境变量注入（变量名 `COS_ACCESS_KEY` / `COS_SECRET_KEY` / `COS_REGION` / `COS_BUCKET` / `COS_HOST`，由 prod profile `${COS_*}` 占位符消费）。
-- 一次性迁移 `CosDeployMigrationRunner` 已将本地 `tmp/code_deploy/*` 全部上传 COS（27 个 deployKey、144 文件），生产 COS 桶 `xiaolou-bi-1382226492` 公有读。
-- Cloudflare Pages（前端）部署项目 `xiaolou-nocode`，生产域名 `https://xiaolou-nocode.pages.dev`。
-
-### 9. 调试检查清单
-1. 浏览器 DevTools → Network → 点击"查看作品"，看实际请求 URL 是 Railway `/api/static/...` 直链。
-2. 若跳到 Railway `/api/static/...` 但返回 404：Railway 容器无持久化目录（`tmp/code_deploy` 不存在），需确认后端 `StaticResourceController` 能否正常返回或改用其他托管方式。
+### 7. 调试检查清单
+1. 启动 Nacos（项目依赖，本地需 `127.0.0.1:8848`）与后端（`mvn -pl ai-no-code-app spring-boot:run`，端口 8123）。
+2. 浏览器 DevTools → Network → 点击精品案例"查看作品"，请求 `http://localhost:8123/api/static/{deployKey}/` 应返回 200 且为 HTML。
+3. 若本地 `tmp/code_deploy/{deployKey}` 存在，走本地盘；重命名该目录后再次访问应回退到 DB 返回（验证 DB 路径生效）。
+4. 直接查库验证：`SELECT deploy_key, file_path, file_size FROM app_deploy_asset WHERE is_delete=0;` 应含 38 条记录。
 
 ## 站点流量统计（友盟+ U-Web，仅平台前端）
 

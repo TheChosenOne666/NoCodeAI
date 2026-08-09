@@ -67,9 +67,9 @@ public class GlobalExceptionHandler {
                 return true;
             }
             try {
-                // 设置SSE响应头
-                response.setContentType("text/event-stream");
+                // 设置SSE响应头（先设置字符编码，再设置Content-Type，确保charset生效）
                 response.setCharacterEncoding("UTF-8");
+                response.setContentType("text/event-stream;charset=UTF-8");
                 response.setHeader("Cache-Control", "no-cache");
                 response.setHeader("Connection", "keep-alive");
                 // 构造错误消息的SSE格式
