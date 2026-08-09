@@ -95,7 +95,7 @@ import { useRouter } from 'vue-router'
 import { userRegister } from '@/api/userController.ts'
 import { message } from 'ant-design-vue'
 import { reactive, onMounted, onUnmounted } from 'vue'
-import loginBg from '@/assets/login-bg.png'
+import loginBg from '@/assets/logo.png'
 
 const router = useRouter()
 
