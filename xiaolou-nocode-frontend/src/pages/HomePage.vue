@@ -38,7 +38,7 @@ const myAppsPage = reactive({
 const featuredApps = ref<API.AppVO[]>([])
 const featuredAppsPage = reactive({
   current: 1,
-  pageSize: 6,
+  pageSize: 9,
   total: 0,
   showPagination: false,
 })
@@ -733,10 +733,10 @@ onMounted(() => {
   margin-bottom: 32px;
 }
 
-/* 精选案例网格 */
+/* 精选案例网格（每页 9 个，3×3 九宫格） */
 .featured-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 24px;
   margin-bottom: 32px;
 }
@@ -749,6 +749,12 @@ onMounted(() => {
 }
 
 /* 响应式设计 */
+@media (max-width: 1024px) {
+  .featured-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 768px) {
   .hero-title {
     font-size: 28px;

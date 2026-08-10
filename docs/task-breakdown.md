@@ -458,6 +458,33 @@ for key 'app_deploy_asset.uk_deploy_path'
 2. 第二次生成应正常落库并在右侧预览更新，不再报 `Duplicate entry`；
 3. 查询 `app_deploy_asset` 中 `deploy_key = preview_{appId}` 的记录数应等于本次生成文件数（旧文件被覆盖而非叠加，无重复 `file_path`）。
 
+## M7-10 部署失败：应用代码不存在（2026-08-10）
+
+### 背景
+用户点击「部署」后，后端返回「应用代码不存在，请先生成代码」。但右侧预览已正常显示，说明生成产物已作为 `preview_{appId}` 持久化到数据库，只是 `tmp/code_output/{codeGenType}_{appId}` 本地源目录已被清理（Railway 等无状态容器磁盘丢失）。
+
+### 根因
+`AppServiceImpl.deployApp` 第 6 步直接检查本地源目录 `CODE_OUTPUT_ROOT_DIR/{codeGenType}_{appId}`，不存在即抛异常；未利用数据库中已存在的预览资源。
+
+### 改动范围
+- **`AppDeployAssetMapper`**：新增 `selectListByDeployKey(@Param("deployKey"))` 注解方法，按 deploy_key 查询全部未删除资源。
+- **`AppServiceImpl`**：
+  - `deployApp` 中本地源目录不存在时，改为调用 `copyPreviewAssetsToDeploy(appId, deployKey)` 从 `preview_{appId}` 复制全部资源到新 deployKey。
+  - 新增私有方法 `copyPreviewAssetsToDeploy`：读取 preview 资源列表，改写 deployKey 后批量 `upsertBatch`。
+  - 仅当 preview 也不存在时才返回「应用代码不存在，请先生成代码」。
+
+### 进度
+- [x] `AppDeployAssetMapper.selectListByDeployKey`
+- [x] `AppServiceImpl.copyPreviewAssetsToDeploy` 与 `deployApp` 分支改造
+- [x] `mvn test` 全编译通过
+- [ ] 前后端联调（步骤见下）
+
+### 验证步骤
+1. 确保 `app_deploy_asset` 中存在 `deploy_key = preview_{appId}` 记录（生成一次即可）。
+2. 删除或重命名本地 `tmp/code_output/{codeGenType}_{appId}` 目录，模拟无状态容器。
+3. 前端点「部署」，应返回 `/api/static/{deployKey}/` URL 且 200。
+4. 查库确认 `app_deploy_asset` 中新增 `deploy_key = {deployKey}` 的记录，内容与 preview 一致。
+
 ## M7-9 Spring MVC 下 SSE 无实时打字机效果 / Cloudflare 524 超时（2026-08-10）
 
 ### 背景

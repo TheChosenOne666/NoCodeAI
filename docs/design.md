@@ -64,11 +64,13 @@
 ```
 1. 取 app.deployKey（无则生成 6 位随机串）
 2. 取 codeGenType，定位源目录 CODE_OUTPUT_ROOT_DIR/{type}_{appId}
-3. Vue 项目：先执行构建（vueProjectBuilder.buildProject），将 dist 目录作为源
-4. saveDeployAssets(deployKey, sourceDir)：
-   - 递归收集源目录下所有文件，计算相对路径（file_path）、MIME（Files.probeContentType）、字节（content）
-   - 先按 deploy_key 删除旧记录（幂等，支持重复部署）
-   - 批量 insert 到 app_deploy_asset
+3. 源目录存在时：
+   - Vue 项目：先执行构建（vueProjectBuilder.buildProject），将 dist 目录作为源
+   - saveDeployAssets(deployKey, sourceDir)：递归收集源目录下所有文件，计算相对路径、MIME、字节，upsert 到 app_deploy_asset
+4. 源目录不存在时（Railway 等无状态容器磁盘被清理）：
+   - 从数据库 `preview_{appId}` 读取全部预览资源，复制到新 deployKey（`copyPreviewAssetsToDeploy`）
+   - 若 preview 资源也不存在，则返回「应用代码不存在，请先生成代码」
+5. 更新 app.deployKey、deployedTime，返回 `/api/static/{deployKey}/`
 5. 更新 app.deployKey / deployedTime
 6. 返回 /api/static/{deployKey}/（前端打开即由 StaticResourceController 查库返回，不依赖本地磁盘）
 ```

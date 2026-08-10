@@ -255,30 +255,37 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         String codeGenType = app.getCodeGenType();
         String sourceDirName = codeGenType + "_" + appId;
         String sourceDirPath = AppConstant.CODE_OUTPUT_ROOT_DIR + File.separator + sourceDirName;
-        // 6. 检查源目录是否存在
+        // 6. 检查源目录是否存在；不存在时尝试从数据库中的 preview_{appId} 资源复制，
+        //    以兼容 Railway 等无状态容器磁盘目录被清理后仍能部署（预览资源已持久化）。
         File sourceDir = new File(sourceDirPath);
         if (!sourceDir.exists() || !sourceDir.isDirectory()) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用代码不存在，请先生成代码");
-        }
-        // 7. Vue 项目特殊处理：执行构建
-        CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
-        if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
-            // Vue 项目需要构建
-            boolean buildSuccess = vueProjectBuilder.buildProject(sourceDirPath);
-            ThrowUtils.throwIf(!buildSuccess, ErrorCode.SYSTEM_ERROR, "Vue 项目构建失败，请检查代码和依赖");
-            // 检查 dist 目录是否存在
-            File distDir = new File(sourceDirPath, "dist");
-            ThrowUtils.throwIf(!distDir.exists(), ErrorCode.SYSTEM_ERROR, "Vue 项目构建完成但未生成 dist 目录");
-            // 将 dist 目录作为部署源
-            sourceDir = distDir;
-            log.info("Vue 项目构建成功，将部署 dist 目录: {}", distDir.getAbsolutePath());
-        }
-        // 8. 将部署文件写入数据库 app_deploy_asset（与精品案例一致，访问时由 StaticResourceController 查库返回，
-        //    不再依赖本地磁盘，线上环境稳定且 URL 不绑定 localhost）
-        try {
-            saveDeployAssets(deployKey, sourceDir);
-        } catch (Exception e) {
-            throw new BusinessException(ErrorCode.SYSTEM_ERROR, "部署失败：" + e.getMessage());
+            log.warn("本地部署源目录不存在，尝试从数据库预览资源复制，appId={}, sourceDir={}", appId, sourceDirPath);
+            boolean copied = copyPreviewAssetsToDeploy(appId, deployKey);
+            if (!copied) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "应用代码不存在，请先生成代码");
+            }
+            log.info("已从数据库预览资源复制到正式部署，appId={}, deployKey={}", appId, deployKey);
+        } else {
+            // 7. Vue 项目特殊处理：执行构建
+            CodeGenTypeEnum codeGenTypeEnum = CodeGenTypeEnum.getEnumByValue(codeGenType);
+            if (codeGenTypeEnum == CodeGenTypeEnum.VUE_PROJECT) {
+                // Vue 项目需要构建
+                boolean buildSuccess = vueProjectBuilder.buildProject(sourceDirPath);
+                ThrowUtils.throwIf(!buildSuccess, ErrorCode.SYSTEM_ERROR, "Vue 项目构建失败，请检查代码和依赖");
+                // 检查 dist 目录是否存在
+                File distDir = new File(sourceDirPath, "dist");
+                ThrowUtils.throwIf(!distDir.exists(), ErrorCode.SYSTEM_ERROR, "Vue 项目构建完成但未生成 dist 目录");
+                // 将 dist 目录作为部署源
+                sourceDir = distDir;
+                log.info("Vue 项目构建成功，将部署 dist 目录: {}", distDir.getAbsolutePath());
+            }
+            // 8. 将部署文件写入数据库 app_deploy_asset（与精品案例一致，访问时由 StaticResourceController 查库返回，
+            //    不再依赖本地磁盘，线上环境稳定且 URL 不绑定 localhost）
+            try {
+                saveDeployAssets(deployKey, sourceDir);
+            } catch (Exception e) {
+                throw new BusinessException(ErrorCode.SYSTEM_ERROR, "部署失败：" + e.getMessage());
+            }
         }
         // 9. 更新应用的 deployKey 和部署时间
         App updateApp = new App();
@@ -331,6 +338,39 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         // 避免重复生成同一应用时先删后插竞态导致的 Duplicate entry 异常
         appDeployAssetMapper.upsertBatch(assets);
         log.info("预览资源已持久化到数据库，deployKey={}，文件数={}", deployKey, assets.size());
+    }
+
+    /**
+     * 将数据库中 preview_{appId} 的预览资源复制到正式 deployKey，用于无状态容器
+     * 本地磁盘目录已被清理、但数据库预览资源仍存在的场景。
+     *
+     * @param appId     应用ID
+     * @param deployKey 正式部署标识
+     * @return true-复制成功且至少有一个文件；false-预览资源不存在或为空
+     */
+    private boolean copyPreviewAssetsToDeploy(Long appId, String deployKey) {
+        String previewKey = "preview_" + appId;
+        List<AppDeployAsset> previewAssets = appDeployAssetMapper.selectListByDeployKey(previewKey);
+        if (CollUtil.isEmpty(previewAssets)) {
+            log.warn("数据库中不存在预览资源，无法复制到部署，appId={}", appId);
+            return false;
+        }
+        List<AppDeployAsset> newAssets = previewAssets.stream()
+                .map(asset -> {
+                    AppDeployAsset copy = new AppDeployAsset();
+                    copy.setDeployKey(deployKey);
+                    copy.setFilePath(asset.getFilePath());
+                    copy.setContentType(asset.getContentType());
+                    copy.setFileSize(asset.getFileSize());
+                    copy.setContent(asset.getContent());
+                    copy.setIsDelete(0);
+                    return copy;
+                })
+                .collect(Collectors.toList());
+        appDeployAssetMapper.upsertBatch(newAssets);
+        log.info("已将 preview 资源复制到正式部署，previewKey={}，deployKey={}，文件数={}",
+                previewKey, deployKey, newAssets.size());
+        return true;
     }
 
     /**

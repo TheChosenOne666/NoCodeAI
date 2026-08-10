@@ -28,6 +28,17 @@ public interface AppDeployAssetMapper extends BaseMapper<AppDeployAsset> {
     AppDeployAsset selectByDeployKeyAndPath(@Param("deployKey") String deployKey, @Param("filePath") String filePath);
 
     /**
+     * 按部署标识查询所有未删除的资源。
+     *
+     * @param deployKey 部署标识
+     * @return 该部署下的全部资源列表
+     */
+    @Select("SELECT id, deploy_key AS deployKey, file_path AS filePath, content_type AS contentType, "
+            + "file_size AS fileSize, content, create_time AS createTime, update_time AS updateTime, is_delete AS isDelete "
+            + "FROM app_deploy_asset WHERE deploy_key = #{deployKey} AND is_delete = 0")
+    List<AppDeployAsset> selectListByDeployKey(@Param("deployKey") String deployKey);
+
+    /**
      * 批量 upsert 部署资源。利用唯一键 uk_deploy_path(deploy_key, file_path) 实现「存在即更新、不存在即插入」，
      * 避免重复生成同一应用时先删后插的竞态导致的 Duplicate entry 异常。
      *
