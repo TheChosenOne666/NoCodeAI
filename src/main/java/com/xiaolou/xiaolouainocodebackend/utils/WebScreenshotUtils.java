@@ -128,8 +128,13 @@ public class WebScreenshotUtils {
 
             // 配置 Chrome 选项
             ChromeOptions options = new ChromeOptions();
-            // 无头模式
-            options.addArguments("--headless");
+            // 使用环境变量指定的 Chrome 本体路径（Docker 容器中为 google-chrome-stable）
+            String chromeBin = System.getenv("CHROME_BIN");
+            if (StrUtil.isNotBlank(chromeBin)) {
+                options.setBinary(chromeBin);
+            }
+            // 无头模式（新版 Chrome 推荐 --headless=new）
+            options.addArguments("--headless=new");
             // 禁用GPU(在某些环境下避免问题)
             options.addArguments("--disable-gpu");
             // 禁用沙盒模式(Docker环境需要)

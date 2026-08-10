@@ -215,3 +215,32 @@ getDeployUrl(deployKey) = `${API_BASE_URL}/static/${deployKey}/`
 
 ### 验证
 构建部署后，浏览器 Network 确认 `umeng-web.js` 返回 200；友盟控制台对应站点可见实时数据。
+
+## 作品封面截图与容器 Chrome 环境（2026-08-10）
+
+### 1. 背景
+部署作品后由 `WebScreenshotUtils` 用 Selenium + ChromeDriver 异步截封面图写入 `app.cover`。原运行镜像 `eclipse-temurin:21-jre-jammy` 只含 JRE，不含 Chrome 浏览器本体；`WebDriverManager.chromedriver().setup()` 仅下载 driver，故启动 `ChromeDriver` 时报「初始化 Chrome 浏览器失败」。
+
+### 2. 修复方案（方案 A：运行镜像内置 Chrome）
+- Dockerfile 运行阶段由 `eclipse-temurin:21-jre-jammy` 改为 `ubuntu:22.04`，通过 `apt-get` 安装：
+  - `openjdk-21-jre-headless`（运行 JAR）；
+  - `google-chrome-stable`（截图所需 Chrome 本体）；
+  - 运行 Chrome 所需的系统库（`libnss3`、`libgbm1`、`libatk-bridge2.0-0` 等）。
+- 注入环境变量 `CHROME_BIN=/usr/bin/google-chrome-stable`。
+- `WebScreenshotUtils.getWebDriver` 读取 `CHROME_BIN` 作为 `ChromeOptions.setBinary`；headless 参数由 `--headless` 升级为 `--headless=new`（新版 Chrome 推荐）。
+
+### 3. Dockerfile 关键片段
+```dockerfile
+FROM ubuntu:22.04
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      openjdk-21-jre-headless wget gnupg ca-certificates \
+      libnss3 libatk-bridge2.0-0 libgbm1 ... google-chrome-stable \
+ && apt-get clean && rm -rf /var/lib/apt/lists/*
+ENV CHROME_BIN=/usr/bin/google-chrome-stable
+```
+
+### 4. 验证
+- 重新构建 Railway 镜像部署后，部署任意作品；
+- 后端日志应出现「原始截图保存成功」「压缩图片保存成功」，且 `app.cover` 被写入可访问的封面 URL；
+- 不再出现「初始化 Chrome 浏览器失败」。
+- 本地无 Chrome 时仍可用 `CHROME_BIN` 指向本机 Chrome 路径（如 `C:/Program Files/Google/Chrome/Application/chrome.exe`）保持兼容。

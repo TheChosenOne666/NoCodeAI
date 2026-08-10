@@ -386,6 +386,36 @@ if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {  // ← 分支外用 codeGenT
 2. 应能在 120s 内收到 `done` 并右侧预览更新，不再报「AI生成错误」；
 3. Railway 日志确认 `app_deploy_asset` 查询返回 `Total: 1`（生成成功并落库）。
 
+## M7-7 作品封面截图「初始化 Chrome 浏览器失败」修复（容器内置 Chrome，2026-08-10）
+
+### 背景
+部署作品后由 `WebScreenshotUtils`（Selenium + ChromeDriver）异步截封面图写入 `app.cover`。原运行镜像 `eclipse-temurin:21-jre-jammy` 仅含 JRE，**不含 Chrome 浏览器本体**；`WebDriverManager.chromedriver().setup()` 只下载 driver，不装 Chrome → 启动 `new ChromeDriver(options)` 报错「初始化 Chrome 浏览器失败」，封面始终为空。
+
+### 修复方案（方案 A：运行镜像内置 Chrome）
+1. **Dockerfile 运行阶段改造**：由 `eclipse-temurin:21-jre-jammy` 换成 `ubuntu:22.04`，`apt-get` 安装：
+   - `openjdk-21-jre-headless`（运行 JAR）；
+   - `google-chrome-stable`（截图所需 Chrome 本体，依赖 Google 官方 apt 源）；
+   - Chrome 运行所需系统库（`libnss3`、`libgbm1`、`libatk-bridge2.0-0`、`libcups2`、`libxkbcommon0` 等）；
+   - 安装后 `apt-get clean && rm -rf /var/lib/apt/lists/*` 减小镜像体积。
+2. **注入环境变量** `CHROME_BIN=/usr/bin/google-chrome-stable`。
+3. **`WebScreenshotUtils.getWebDriver`**：读取 `CHROME_BIN` 作为 `ChromeOptions.setBinary`；headless 参数由 `--headless` 升级为 `--headless=new`（新版 Chrome 推荐写法）。本地无 Chrome 时可由 `CHROME_BIN` 指向本机路径保持兼容。
+
+### 进度
+- [x] Dockerfile 运行阶段改用 `ubuntu:22.04` 并安装 JRE21 + `google-chrome-stable`
+- [x] Dockerfile 注入 `CHROME_BIN=/usr/bin/google-chrome-stable` 环境变量
+- [x] `WebScreenshotUtils` 读取 `CHROME_BIN` 设 `setBinary`，headless 改 `--headless=new`
+- [x] 文档同步（本节 + design.md §「作品封面截图与容器 Chrome 环境」）
+
+### 破坏性变更提示
+- Dockerfile 运行镜像变更（基础镜像由 Temurin JRE 换 Ubuntu + JRE21），Railway 需**重新构建镜像**而非仅重启；首构建会因下载 Chrome 较慢，属正常现象。
+- 无其他接口/数据结构变更。
+
+### 联调步骤
+1. 重新构建镜像并部署到 Railway（代码已改 Dockerfile + `WebScreenshotUtils`）。
+2. 进入「我的作品」→ 部署任一应用 → 等待异步截图（虚拟线程）。
+3. Railway 后端日志应打印「原始截图保存成功」「压缩图片保存成功」，且 `app.cover` 被写入可访问封面 URL；前端作品卡片显示封面图。
+4. 排错：若仍报「初始化 Chrome 浏览器失败」，进 Railway 容器 `which google-chrome-stable` 应存在；或直接 `google-chrome-stable --version` 验证可运行；确认 `CHROME_BIN` 环境变量已注入。
+
 2. 触发一次问答/代码生成，观察后端日志 `modelName=doubao-seed-evolving`（或在 ark 控制台确认调用模型）。
 3. 验证生成质量符合预期（doubao-seed-evolving 为对话/代码通用模型，替代 deepseek-v4-flash 应无缝）。
 
