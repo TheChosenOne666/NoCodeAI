@@ -416,6 +416,38 @@ if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {  // ← 分支外用 codeGenT
 3. Railway 后端日志应打印「原始截图保存成功」「压缩图片保存成功」，且 `app.cover` 被写入可访问封面 URL；前端作品卡片显示封面图。
 4. 排错：若仍报「初始化 Chrome 浏览器失败」，进 Railway 容器 `which google-chrome-stable` 应存在；或直接 `google-chrome-stable --version` 验证可运行；确认 `CHROME_BIN` 环境变量已注入。
 
+## M7-8 后台应用管理：默认排序改为最新在上 + 修复分页下一页（2026-08-10）
+
+### 背景
+管理员后台「应用管理」(`AppManagePage.vue`) 存在两个问题：
+1. **排序反了**：列表从上到下是最早 → 现在（最老在上），期望最新应用在最上方。
+2. **分页点不了下一页**：翻页后下一页按钮置灰不可点。
+
+### 根因
+1. **排序**：`AppServiceImpl.getQueryWrapper` 仅在传入 `sortField` 时才排序（`queryWrapper.orderBy(validSortField(sortField), ...)`）；而前端 `fetchData` 只透传 `searchParams`（仅含 current/pageSize，未传 sortField/sortOrder），导致不排序，数据库按主键升序返回（最老在上）。缺少与 `ChatHistoryServiceImpl` 一致的「未传排序则默认 `orderByDesc("createTime")`」兜底。
+2. **分页**：后端 `Page` 序列化的总数字段是 MyBatis-Plus 默认的 `total`，而前端 `AppManagePage.vue` 第 175 行只读 `res.data.data.totalRow ?? 0`。`totalRow` 为 undefined → `total.value` 恒为 0 → 分页器认为仅 1 页，下一页永远禁用。（对比 `MyWorksPage`/`HomePage` 用了 `total ?? totalRow` 故正常。）
+
+### 修复方案
+1. **后端** `AppServiceImpl.getQueryWrapper`：未传入合法 `sortField` 时追加 `queryWrapper.orderByDesc("createTime")`，使默认最新在最上。
+2. **前端** `AppManagePage.vue` 第 175 行：`total.value = res.data.data.total ?? res.data.data.totalRow ?? 0`。
+
+### 进度
+- [x] `AppServiceImpl.getQueryWrapper` 增加默认 `orderByDesc("createTime")` 兜底
+- [x] `AppManagePage.vue` 的 `total` 读取改为 `total ?? totalRow`
+- [x] 后端编译通过（`mvn -q -o compile`，exitCode 0）
+- [x] 文档同步（本节 + design.md 如有需要）
+
+### 破坏性变更提示
+- 纯排序默认值与前端字段读取修复，无接口签名/数据结构破坏性变更。
+- 后端需重新构建部署（Railway）生效；前端需重新构建部署（Cloudflare Pages）生效。
+
+### 联调步骤
+1. 后端重新部署、前端重新构建部署 Cloudflare。
+2. 进入管理员后台「应用管理」：
+   - 列表应按创建时间倒序，最新应用在最上方。
+   - 总条数 > 1 页时，点击「下一页」可正常翻页，页码/总数正确显示。
+3. 验证搜索、编辑、精选、删除后仍按倒序刷新。
+
 2. 触发一次问答/代码生成，观察后端日志 `modelName=doubao-seed-evolving`（或在 ark 控制台确认调用模型）。
 3. 验证生成质量符合预期（doubao-seed-evolving 为对话/代码通用模型，替代 deepseek-v4-flash 应无缝）。
 

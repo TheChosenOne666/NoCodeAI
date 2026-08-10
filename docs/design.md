@@ -244,3 +244,15 @@ ENV CHROME_BIN=/usr/bin/google-chrome-stable
 - 后端日志应出现「原始截图保存成功」「压缩图片保存成功」，且 `app.cover` 被写入可访问的封面 URL；
 - 不再出现「初始化 Chrome 浏览器失败」。
 - 本地无 Chrome 时仍可用 `CHROME_BIN` 指向本机 Chrome 路径（如 `C:/Program Files/Google/Chrome/Application/chrome.exe`）保持兼容。
+
+## 后台应用管理排序与分页修复（2026-08-10）
+
+### 1. 问题
+管理员后台「应用管理」列表：① 默认顺序是最老在上（期望最新在上）；② 分页「下一页」点不动。
+
+### 2. 根因与修复
+- **排序**：`AppServiceImpl.getQueryWrapper` 仅当传入 `sortField` 才排序；前端未传 → 不排序（主键升序）。修复：未传合法 `sortField` 时默认 `queryWrapper.orderByDesc("createTime")`（与 `ChatHistoryServiceImpl` 一致）。
+- **分页**：后端 `Page` 总数字段为 `total`，前端 `AppManagePage.vue` 只读 `totalRow` 导致 `total=0`、下一页被禁用。修复：`total.value = data.total ?? data.totalRow ?? 0`。
+
+### 3. 影响
+后端（Railway 重新构建）+ 前端（Cloudflare 重新构建）均需重新部署生效；无接口/数据结构破坏性变更。

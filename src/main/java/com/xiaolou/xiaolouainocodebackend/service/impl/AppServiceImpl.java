@@ -163,6 +163,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         }
         if (SqlUtils.validSortField(sortField)) {
             queryWrapper.orderBy(true, sortOrder.equals(CommonConstant.SORT_ORDER_ASC), sortField);
+        } else {
+            // 默认按创建时间倒序，最新在最上方
+            queryWrapper.orderByDesc("createTime");
         }
 
         return queryWrapper;
