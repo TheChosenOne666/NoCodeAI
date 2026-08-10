@@ -712,6 +712,12 @@ const generateCode = async (userMessage: string, aiMessageIndex: number, request
       setTimeout(async () => {
         await fetchAppInfo()
         await updatePreview()
+        // 兜底检查：生成内容中连代码块或 </html> 都没有，说明输出被截断或保存失败
+        const hasCodeBlock = fullContent.includes('</html>') || fullContent.includes('```')
+        if (!hasCodeBlock) {
+          messages.value[aiMessageIndex].content = '生成内容不完整，未能保存为可预览页面。可能是需求过于复杂导致输出被截断，请尝试简化需求后重试。'
+          message.warning('生成内容不完整，未能保存预览，请尝试简化需求后重试')
+        }
       }, 1000)
     })
 
@@ -894,21 +900,22 @@ const updatePreview = async () => {
   previewUrl.value = newPreviewUrl
   previewReady.value = true
 
-  // Vue 项目需要同时设置右侧预览状态
-  if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {
-    // 先确认 dist/index.html 真的存在，避免显示 404
-    try {
-      const res = await fetch(newPreviewUrl, {
-        method: 'HEAD',
-        credentials: 'include',
-      })
-      if (res.ok) {
+  // 确认预览文件真的存在，避免显示 404 空白页
+  try {
+    const res = await fetch(newPreviewUrl, {
+      method: 'HEAD',
+      credentials: 'include',
+    })
+    if (res.ok) {
+      if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {
         vuePreviewUrl.value = `${newPreviewUrl}?t=${Date.now()}`
         vuePreviewReady.value = true
       }
-    } catch (error) {
-      console.log('Vue 预览文件尚未生成:', error)
+    } else {
+      message.warning('预览文件尚未生成，请稍后重试')
     }
+  } catch (error) {
+    console.log('预览文件尚未生成:', error)
   }
 }
 

@@ -10,7 +10,14 @@ import java.util.regex.Pattern;
  */
 public class HtmlCodeParser implements CodeParser<HtmlCodeResult> {
 
+    /**
+     * 闭合的 HTML 代码块：```html ... ```（含结束标记）。
+     */
     private static final Pattern HTML_CODE_PATTERN = Pattern.compile("```html\\s*\\n([\\s\\S]*?)```", Pattern.CASE_INSENSITIVE);
+    /**
+     * 未闭合兜底：```html ... 到内容末尾。某些模型输出被截断时，结束标记可能丢失。
+     */
+    private static final Pattern HTML_CODE_PATTERN_UNCLOSED = Pattern.compile("```html\\s*\\n([\\s\\S]*)", Pattern.CASE_INSENSITIVE);
 
     @Override
     public HtmlCodeResult parseCode(String codeContent) {
@@ -27,15 +34,20 @@ public class HtmlCodeParser implements CodeParser<HtmlCodeResult> {
     }
 
     /**
-     * 提取HTML代码内容 该方法使用正则表达式模式从输入内容中提取HTML代码部分
-     *，可能包含HTML代码的字符串
+     * 提取 HTML 代码内容。优先匹配完整闭合的代码块；若 AI 输出被截断没有结束标记，
+     * 兜底提取 ```html 之后到内容末尾的部分，尽量挽救可运行代码。
+     *
      * @param content 原始内容
      * @return HTML代码
      */
     private static String extractHtmlCode(String content) {
-        Matcher matcher = HTML_CODE_PATTERN.matcher(content);
-        if (matcher.find()) {
-            return matcher.group(1);
+        Matcher closedMatcher = HTML_CODE_PATTERN.matcher(content);
+        if (closedMatcher.find()) {
+            return closedMatcher.group(1);
+        }
+        Matcher unclosedMatcher = HTML_CODE_PATTERN_UNCLOSED.matcher(content);
+        if (unclosedMatcher.find()) {
+            return unclosedMatcher.group(1);
         }
         return null;
     }

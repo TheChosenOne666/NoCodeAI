@@ -139,6 +139,17 @@ getDeployUrl(deployKey) = `${API_BASE_URL}/static/${deployKey}/`
 - **迁移代价**：旧版登录 cookie 在 Railway 域，新版同源后用户需**重新登录一次**（Cloudflare 域初始无旧 cookie），之后正常。
 - **CORS**：后端 `allowedOriginPatterns("*")` + `allowCredentials(true)`，会反射请求 Origin，同源/跨域均兼容。
 
+### 9.x 流式 SSE 链路与生成截断治理（2026-08-10）
+
+- **问题**：模型输出存在 max output token 上限，长 HTML 常在标记闭合前被截断，导致①原 `HtmlCodeParser` 只匹配 ```` ```html ... ``` ```` 闭合块、截断时无匹配 → 回退整段当 HTML 但含残缺 JS → 白屏；②`processCodeStream` 解析/保存异常仅打日志、仍发 `done` → 前端以为成功但 `app_deploy_asset` 无记录 → 预览空白且无反馈；③提示词未约束完成话术，用户难辨生成是否结束；④流式 120s 超时偏紧偶发中断。
+- **治理**：
+  - **解析兜底**：`HtmlCodeParser` 新增 `HTML_CODE_PATTERN_UNCLOSED`，`extractHtmlCode` 先匹配闭合块，失败则提取 ```` ```html ```` 后到末尾内容，挽救可运行代码。
+  - **SSE 链路透传 + 失败透传**：`AiCodeGeneratorFacade.generateAndSaveCodeStream` 返回 `Flux<ServerSentEvent<String>>`；`processCodeStream` 把每个 chunk 包成 `data: {"data": chunk}` 实时透传；流完成后 `Mono.fromRunnable` 执行解析保存，异常写 `saveError` 再 `Mono.defer` 发 `event: business-error`（带 `message`）或 `event: done`。`SimpleTextStreamHandler` 仅收集默认 message 事件（`event.event()==null` 的 JSON `data` 字段）写 AI 历史；`StreamHandlerExecutor` VUE_PROJECT 分支过滤默认事件 → `JsonMessageStreamHandler` → 包回 SSE → 追加 `done`；`AppController.chatToGenCode` 直接透传。`business-error` 契约：前端 `EventSource` 监听 `business-error` 事件并显示提示，不再静默空白。
+  - **超时缓冲**：`StreamingChatModelConfig` 流式超时 120s → 300s。
+  - **提示词约束**：`code-gen-html-system-prompt.txt` 第 9 条「仅 1 个 HTML 代码块」；新增第 10 条「结束后必须输出自然语言完成话术」、第 11 条「MVP 优先控制代码量」、第 12 条「保证 `</html>` 与 ```` ``` ```` 完整闭合」。
+  - **前端兜底**：`AppChatPage.vue` `done` 事件后若 `fullContent` 不含 `</html>` 或 ```` ``` ````` 则提示「生成内容不完整，请重新生成」；`updatePreview` 对 HTML/VUE 统一 HEAD 校验预览文件存在，否则 `message.warning`。
+- **效果**：截断可挽救、保存失败前端可见、完成话术明确、预览必现且可校验，多轮续写稳定不超时。
+
 ### 9. 输入框清空 / 保留策略（2026-08-09）
 - **场景**：应用聊天页发送提示词后，期望"生成成功则清空输入框、生成失败则保留输入以便重试"。
 - **实现**：`sendMessage` 发送时不再立即清空，仅记录 `lastUserInput`；成功路径（`done` 事件 / Vue `preview-ready`）置 `userInput = ''`；

@@ -389,3 +389,47 @@ if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {  // ← 分支外用 codeGenT
 2. 触发一次问答/代码生成，观察后端日志 `modelName=doubao-seed-evolving`（或在 ark 控制台确认调用模型）。
 3. 验证生成质量符合预期（doubao-seed-evolving 为对话/代码通用模型，替代 deepseek-v4-flash 应无缝）。
 
+## M7-7 生成截断兜底 / 完成话术 / 预览必现（2026-08-10）
+
+### 背景
+用户反馈：AI 生成到一半（如 `function drawCloud...`）就停了，预览空白；且要求「每次生成完 AI 都要说完成话术」「每次生成完都要能预览」。
+根因组合：
+1. **模型输出被截断**：部分模型存在 max output token 上限，长 HTML 在标记闭合前被截断 → 原 `HtmlCodeParser` 只匹配 ```` ```html ... ``` ```` 闭合块，截断时无匹配 → 回退「整段当 HTML」但常含残缺 JS，运行即白屏。
+2. **保存失败被静默吞**：`processCodeStream` 解析/保存异常仅在日志打印，`EventSource` 收到的是正常 `done` → 前端以为成功但 `app_deploy_asset` 无记录 → 预览空白、且用户无感知。
+3. **缺完成话术**：提示词未约束「生成结束后用自然语言说明已完成」，用户无法区分「还在生成」与「已完成」。
+4. **流式超时 120s 偏紧**：M7-6 压缩历史后仍偶发超时中断。
+
+### 改动范围
+- **后端 `HtmlCodeParser`**：新增未闭合兜底 `HTML_CODE_PATTERN_UNCLOSED`，`extractHtmlCode` 先匹配闭合块，失败则提取 ```` ```html ```` 之后到末尾内容，尽量挽救可运行代码。
+- **后端 SSE 链路改造（`AiCodeGeneratorFacade` / `SimpleTextStreamHandler` / `StreamHandlerExecutor` / `AppService` / `AppServiceImpl` / `AppController`）**：
+  - `generateAndSaveCodeStream` 返回 `Flux<ServerSentEvent<String>>`；`processCodeStream` 把每个 chunk 包成 `data: {"data": chunk}` 透传；流完成后 `Mono.fromRunnable` 执行解析保存，异常写入 `saveError` 再 `Mono.defer` 返回 `event: business-error`（带 `message`）或 `event: done`。
+  - `SimpleTextStreamHandler.handle` 仅收集默认 message 事件（JSON `data` 字段）写入 AI 对话历史。
+  - `StreamHandlerExecutor` VUE_PROJECT 分支过滤默认事件 → `JsonMessageStreamHandler` → 包回 SSE → 追加 `done`；HTML/MULTI_FILE 走 `SimpleTextStreamHandler`。
+  - `AppController.chatToGenCode` 直接 `return appService.chatToGenCode(...)`（SSE 已含 data/done/business-error，不再二次拼接）。
+- **后端 `StreamingChatModelConfig`**：`.timeout(Duration.ofSeconds(300))`（120s → 300s 缓冲）。
+- **后端提示词 `code-gen-html-system-prompt.txt`**：
+  - 第 9 条约束「仅输出 1 个 HTML 代码块」；
+  - 新增第 10 条「生成结束后必须输出一段自然语言完成话术（如『已完成 XX 页面，可在右侧预览』）」；
+  - 新增第 11 条「代码量控制：MVP 优先，避免超长导致截断」；
+  - 新增第 12 条「若被截断，保证 `</html>` 与 ```` ``` ```` 完整闭合」。
+- **前端 `AppChatPage.vue`**：
+  - `done` 事件兜底：若 `fullContent` 不含 `</html>` 或 ```` ``` ````，把 AI 消息内容改为「生成内容不完整，请点击重新生成」并 `message.warning`。
+  - `updatePreview`：HTML/VUE 统一先做 HEAD 请求确认预览文件存在，不存在则 `message.warning('预览文件尚未生成，请稍后重试')`。
+
+### 进度
+- [x] `HtmlCodeParser` 未闭合兜底
+- [x] 后端 SSE 链路改造 + `business-error` 透传（保存失败不再静默）
+- [x] 提示词约束（完成话术 + 代码量 + 截断兜底）
+- [x] 流式超时 120s → 300s
+- [x] 前端 `done` 兜底文案 + 预览 HEAD 校验
+- [x] `mvn compile` 全编译通过（含修复 `AppService.java` 重复 import）
+- [x] `ChatHistoryServiceImplTest` 4 例全过
+- [ ] 前后端联调（步骤见下）
+
+### 验证步骤
+1. 后端重新部署（Railway）后，进入任一应用对话，发送较长需求（如「做一个带粒子动画的登录页」）；
+2. 生成期间右侧应实时显示代码流；结束后 AI 消息末尾应出现完成话术；
+3. 右侧预览应成功渲染（HEAD 校验通过），不再空白；
+4. 若故意构造解析失败，前端应弹出 `business-error` 提示而非静默空白；
+5. 多轮「继续生成」稳定不报「AI生成错误」，且每次都落库可预览。
+

@@ -60,7 +60,7 @@ public interface AppService extends IService<App> {
      * @param loginUser
      * @return
      */
-    Flux<String> chatToGenCode(Long appId, String message, String requestId, User loginUser);
+    Flux<ServerSentEvent<String>> chatToGenCode(Long appId, String message, String requestId, User loginUser);
 
     /**
      * 获取 Vue 项目代码生成实时展示流（右侧代码预览专用）

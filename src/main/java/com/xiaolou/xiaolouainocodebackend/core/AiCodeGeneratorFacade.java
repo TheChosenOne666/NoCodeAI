@@ -7,6 +7,7 @@ import com.xiaolou.xiaolouainocodebackend.ai.model.MultiFileCodeResult;
 import com.xiaolou.xiaolouainocodebackend.common.ErrorCode;
 import com.xiaolou.xiaolouainocodebackend.core.parser.CodeParserExecutor;
 import com.xiaolou.xiaolouainocodebackend.core.saver.CodeFileSaverExecutor;
+import cn.hutool.json.JSONUtil;
 import com.xiaolou.xiaolouainocodebackend.exception.BusinessException;
 import com.xiaolou.xiaolouainocodebackend.model.dto.codegen.CodeGenStreamEvent;
 import com.xiaolou.xiaolouainocodebackend.model.enums.CodeGenTypeEnum;
@@ -16,8 +17,11 @@ import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 import java.io.File;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * AI 代码生成门面类，组合生成和保存功能
@@ -74,7 +78,7 @@ public class AiCodeGeneratorFacade {
      * @param appId           应用id
      * @param requestId       请求ID，用于共享同一次 AI 生成
      */
-    public Flux<String> generateAndSaveCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum, Long appId, String requestId) {
+    public Flux<ServerSentEvent<String>> generateAndSaveCodeStream(String userMessage, CodeGenTypeEnum codeGenTypeEnum, Long appId, String requestId) {
         AiCodeGeneratorService aiCodeGeneratorService = aiCodeGeneratorServiceFactory.getAiCodeGeneratorService(appId, codeGenTypeEnum);
         if (codeGenTypeEnum == null) {
             throw new BusinessException(ErrorCode.SYSTEM_ERROR, "生成类型为空");
@@ -91,7 +95,9 @@ public class AiCodeGeneratorFacade {
             case VUE_PROJECT -> {
                 // 使用共享会话，避免同一个用户请求调用两次 AI
                 VueProjectGenStreamManager.GenSession session = vueProjectGenStreamManager.getOrCreateSession(appId, requestId, userMessage);
-                yield session.getChatFlux();
+                yield session.getChatFlux()
+                        .map(chunk -> ServerSentEvent.<String>builder().data(chunk).build())
+                        .concatWith(Mono.just(ServerSentEvent.<String>builder().event("done").data("").build()));
             }
             default -> {
                 String errorMessage = "不支持的生成类型：" + codeGenTypeEnum.getValue();
@@ -122,11 +128,19 @@ public class AiCodeGeneratorFacade {
      * @param appId 应用id
      * @return 流式响应
      */
-    private Flux<String> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, Long appId) {
+    private Flux<ServerSentEvent<String>> processCodeStream(Flux<String> codeStream, CodeGenTypeEnum codeGenType, Long appId) {
         StringBuilder codeBuilder = new StringBuilder();
-        // 实时收集代码片段
-        return codeStream.doOnNext(codeBuilder::append).doOnComplete(() -> {
-            // 流式返回完成后保存代码
+        AtomicReference<Exception> saveError = new AtomicReference<>();
+
+        // 实时收集代码片段并转发为 SSE data 事件
+        Flux<ServerSentEvent<String>> contentFlux = codeStream
+                .doOnNext(codeBuilder::append)
+                .map(chunk -> ServerSentEvent.<String>builder()
+                        .data(JSONUtil.toJsonStr(Map.of("data", chunk)))
+                        .build());
+
+        // 流完成后执行解析/保存，并根据结果追加 done 或 business-error 事件
+        Mono<ServerSentEvent<String>> resultEvent = Mono.fromRunnable(() -> {
             try {
                 String completeCode = codeBuilder.toString();
                 // 使用执行器解析代码
@@ -137,8 +151,20 @@ public class AiCodeGeneratorFacade {
                 // 生成产物持久化到数据库，确保未部署时重新进入仍可预览
                 appService.savePreviewAssets(appId, savedDir);
             } catch (Exception e) {
-                log.error("保存失败: {}", e.getMessage());
+                saveError.set(e);
+                log.error("保存失败: {}", e.getMessage(), e);
             }
-        });
+        }).then(Mono.defer(() -> {
+            if (saveError.get() != null) {
+                String errorMessage = "生成内容保存失败：" + saveError.get().getMessage();
+                return Mono.just(ServerSentEvent.<String>builder()
+                        .event("business-error")
+                        .data(JSONUtil.toJsonStr(Map.of("message", errorMessage)))
+                        .build());
+            }
+            return Mono.just(ServerSentEvent.<String>builder().event("done").data("").build());
+        }));
+
+        return Flux.concat(contentFlux, resultEvent);
     }
 }

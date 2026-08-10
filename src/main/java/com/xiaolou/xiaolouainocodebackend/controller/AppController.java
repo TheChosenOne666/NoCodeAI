@@ -2,10 +2,8 @@ package com.xiaolou.xiaolouainocodebackend.controller;
 
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.StrUtil;
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.xiaolou.xiaolouainocodebackend.ai.AiCodeGenTypeRoutingService;
 import com.xiaolou.xiaolouainocodebackend.annotation.AuthCheck;
 import com.xiaolou.xiaolouainocodebackend.common.BaseResponse;
 import com.xiaolou.xiaolouainocodebackend.common.DeleteRequest;
@@ -34,12 +32,10 @@ import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
 
 import java.io.File;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/app")
@@ -294,16 +290,8 @@ public class AppController {
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
         // 获取当前登录用户
         User loginUser = userService.getLoginUser(request);
-        // 调用服务生成代码（流式）
-        Flux<String> contentFlux = appService.chatToGenCode(appId, message, requestId, loginUser);
-        return contentFlux                .map(
-                chunk -> {
-                    //将内容包装成json对象（字段名 data 与前端 StreamMessage 对齐）
-                    Map<String, String> wrapper = Map.of("data", chunk);
-                    String jsonData = JSONUtil.toJsonStr(wrapper);
-                    return ServerSentEvent.<String>builder().data(jsonData).build();
-                })
-                .concatWith(Mono.just(ServerSentEvent.<String>builder().event("done").data("").build()));
+        // 调用服务生成代码（流式）。返回的 SSE 流已包含 data/done/business-error 事件，直接透传。
+        return appService.chatToGenCode(appId, message, requestId, loginUser);
     }
 
     /**
