@@ -29,6 +29,13 @@ export async function onRequest(context) {
   responseHeaders.delete('content-encoding')
   responseHeaders.delete('content-length')
 
+  // 对于 SSE 流式响应，补充防缓冲头，避免 Cloudflare / 浏览器等待完整响应
+  const isSse = (responseHeaders.get('content-type') || '').toLowerCase().includes('text/event-stream')
+  if (isSse) {
+    responseHeaders.set('cache-control', 'no-cache, no-transform')
+    responseHeaders.set('x-accel-buffering', 'no')
+  }
+
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

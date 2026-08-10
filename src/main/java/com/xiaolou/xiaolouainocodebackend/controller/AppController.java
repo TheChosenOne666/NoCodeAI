@@ -31,7 +31,11 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
+
+import java.util.concurrent.TimeUnit;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -272,16 +276,17 @@ public class AppController {
     }
 
     /**
-     * 应用聊天生成代码（流式 SSE）
+     * 应用聊天生成代码（流式 SSE）。
+     * 注意：项目基于 Spring MVC，直接返回 Flux 不会真正流式输出；必须经由 SseEmitter 订阅并推送。
      *
      * @param appId   应用 ID
      * @param message 用户消息
      * @param request 请求对象
-     * @return 生成结果流
+     * @return SSE 发射器
      */
     @GetMapping(value = "/chat/gen/code", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RateLimit(rate = 2, rateInterval = 60, limitType = RateLimitType.USER, message = "AI 对话请求过于频繁，请稍后再试")
-    public Flux<ServerSentEvent<String>> chatToGenCode(@RequestParam Long appId,
+    public SseEmitter chatToGenCode(@RequestParam Long appId,
                                       @RequestParam String message,
                                       @RequestParam(required = false) String requestId,
                                       HttpServletRequest request) {
@@ -290,8 +295,9 @@ public class AppController {
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
         // 获取当前登录用户
         User loginUser = userService.getLoginUser(request);
-        // 调用服务生成代码（流式）。返回的 SSE 流已包含 data/done/business-error 事件，直接透传。
-        return appService.chatToGenCode(appId, message, requestId, loginUser);
+        // 调用服务生成代码（流式），并通过 SseEmitter 实时推送，避免 Spring MVC 等待 Flux 完整完成
+        Flux<ServerSentEvent<String>> flux = appService.chatToGenCode(appId, message, requestId, loginUser);
+        return subscribeToSseEmitter(flux, 300L, TimeUnit.SECONDS);
     }
 
     /**
@@ -300,21 +306,93 @@ public class AppController {
      * @param appId   应用 ID
      * @param message 用户消息
      * @param request 请求对象
-     * @return 结构化 SSE 事件流
+     * @return SSE 发射器
      */
     @GetMapping(value = "/gen/stream/{appId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     @RateLimit(rate = 2, rateInterval = 60, limitType = RateLimitType.USER, message = "AI 对话请求过于频繁，请稍后再试")
-    public Flux<ServerSentEvent<CodeGenStreamEvent>> genStreamDetail(@PathVariable Long appId,
-                                                                     @RequestParam String message,
-                                                                     @RequestParam(required = false) String requestId,
-                                                                     HttpServletRequest request) {
+    public SseEmitter genStreamDetail(@PathVariable Long appId,
+                                      @RequestParam String message,
+                                      @RequestParam(required = false) String requestId,
+                                      HttpServletRequest request) {
         // 参数校验
         ThrowUtils.throwIf(appId == null || appId <= 0, ErrorCode.PARAMS_ERROR, "应用ID无效");
         ThrowUtils.throwIf(StrUtil.isBlank(message), ErrorCode.PARAMS_ERROR, "用户消息不能为空");
         // 获取当前登录用户
         User loginUser = userService.getLoginUser(request);
         // 调用服务获取结构化实时流
-        return appService.getVueProjectGenStreamDetail(appId, message, requestId, loginUser);
+        Flux<ServerSentEvent<CodeGenStreamEvent>> flux = appService.getVueProjectGenStreamDetail(appId, message, requestId, loginUser);
+        return subscribeToSseEmitter(flux, 300L, TimeUnit.SECONDS);
+    }
+
+    /**
+     * 将 Flux<ServerSentEvent<T>> 桥接到 Spring MVC 的 SseEmitter，实现真正的 HTTP chunked 流式输出。
+     *
+     * @param flux    待桥接的 SSE 事件流
+     * @param timeout 超时时间数值
+     * @param unit    超时时间单位
+     * @param <T>     事件负载类型
+     * @return SseEmitter 实例
+     */
+    private <T> SseEmitter subscribeToSseEmitter(Flux<ServerSentEvent<T>> flux, long timeout, TimeUnit unit) {
+        SseEmitter emitter = new SseEmitter(unit.toMillis(timeout));
+        Disposable[] disposable = new Disposable[1];
+
+        emitter.onCompletion(() -> {
+            if (disposable[0] != null && !disposable[0].isDisposed()) {
+                disposable[0].dispose();
+            }
+        });
+        emitter.onTimeout(() -> {
+            log.warn("SseEmitter 已超时");
+            if (disposable[0] != null && !disposable[0].isDisposed()) {
+                disposable[0].dispose();
+            }
+        });
+        emitter.onError(t -> {
+            log.error("SseEmitter 发生错误", t);
+            if (disposable[0] != null && !disposable[0].isDisposed()) {
+                disposable[0].dispose();
+            }
+        });
+
+        disposable[0] = flux.subscribe(
+                event -> {
+                    try {
+                        SseEmitter.SseEventBuilder builder = SseEmitter.event();
+                        if (event.event() != null) {
+                            builder.name(event.event());
+                        }
+                        if (event.id() != null) {
+                            builder.id(event.id());
+                        }
+                        if (event.data() != null) {
+                            // 后端 ServerSentEvent.data 通常是 JSON 字符串；Spring 默认用 MappingJackson2HttpMessageConverter 再转一次，
+                            // 这里按字符串原样发送，避免额外加引号
+                            builder.data(event.data(), MediaType.TEXT_PLAIN);
+                        }
+                        if (event.comment() != null) {
+                            builder.comment(event.comment());
+                        }
+                        emitter.send(builder);
+                    } catch (Exception e) {
+                        log.error("SseEmitter 发送事件失败", e);
+                        emitter.completeWithError(e);
+                    }
+                },
+                error -> {
+                    log.error("SSE Flux 消费异常", error);
+                    try {
+                        emitter.send(SseEmitter.event().name("business-error")
+                                .data("后端流处理异常: " + error.getMessage(), MediaType.TEXT_PLAIN));
+                    } catch (Exception ignored) {
+                        // 发送失败时忽略，直接完成异常
+                    }
+                    emitter.completeWithError(error);
+                },
+                emitter::complete
+        );
+
+        return emitter;
     }
 
     /**

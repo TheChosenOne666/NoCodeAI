@@ -154,6 +154,15 @@ getDeployUrl(deployKey) = `${API_BASE_URL}/static/${deployKey}/`
 - **问题**：`app_deploy_asset` 唯一键 `uk_deploy_path(deploy_key, file_path)`；原保存逻辑「先按 `deploy_key` 删再批量 `insert`」在重复生成同应用（流式完成异步上下文/竞态）时撞唯一键报 `Duplicate entry`。
 - **治理**：`AppDeployAssetMapper` 新增 `upsertBatch`（@Insert + `ON DUPLICATE KEY UPDATE`，命中唯一键则更新 `content_type/file_size/content/is_delete/update_time`，否则插入）；`AppServiceImpl.savePreviewAssets` / `saveDeployAssets` 统一改为 `upsertBatch`，移除先删后插，天然支持重复生成覆盖更新且消除竞态冲突。
 
+### 9.x.2 Spring MVC 下的 SSE 真正流式输出（2026-08-10）
+- **问题**：项目依赖 `spring-boot-starter-web`（Spring MVC）。Controller 直接返回 `Flux<ServerSentEvent<T>>` 时，Spring MVC 会等待整个 `Flux` 完成后才序列化响应，导致前端看不到打字机效果；经 Cloudflare Pages Functions 代理后，长时间无数据触发 524 超时。
+- **治理**：
+  - `AppController` 的 `/chat/gen/code` 与 `/gen/stream/{appId}` 改为返回 `SseEmitter`。
+  - 新增 `subscribeToSseEmitter`：订阅 `Flux<ServerSentEvent<T>>`，把每个事件的 `event/id/data/comment` 实时通过 `emitter.send` 推送；出错时发送 `business-error` 事件并 `completeWithError`；emitter 关闭/超时/错误时取消 Flux 订阅。
+  - `SseEmitter` 超时设为 300s，匹配模型流式超时。
+  - Cloudflare Functions 代理对 `text/event-stream` 响应补充 `cache-control: no-cache, no-transform` 与 `x-accel-buffering: no`，防止边缘/浏览器缓冲。
+- **效果**：前端可实时看到 AI 输出；Cloudflare 因持续收到 chunk 不再 524；长生成场景稳定。
+
 ### 9. 输入框清空 / 保留策略（2026-08-09）
 - **场景**：应用聊天页发送提示词后，期望"生成成功则清空输入框、生成失败则保留输入以便重试"。
 - **实现**：`sendMessage` 发送时不再立即清空，仅记录 `lastUserInput`；成功路径（`done` 事件 / Vue `preview-ready`）置 `userInput = ''`；

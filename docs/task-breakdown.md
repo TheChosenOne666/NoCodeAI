@@ -458,3 +458,38 @@ for key 'app_deploy_asset.uk_deploy_path'
 2. 第二次生成应正常落库并在右侧预览更新，不再报 `Duplicate entry`；
 3. 查询 `app_deploy_asset` 中 `deploy_key = preview_{appId}` 的记录数应等于本次生成文件数（旧文件被覆盖而非叠加，无重复 `file_path`）。
 
+## M7-9 Spring MVC 下 SSE 无实时打字机效果 / Cloudflare 524 超时（2026-08-10）
+
+### 背景
+用户反馈：生成很慢，一直转圈，没有像打字机一样的流式输出；网络请求返回 Cloudflare `524` 超时（约 2.1 分钟后断开），EventSource 响应大小始终为 0 B。
+
+根因：项目依赖的是 `spring-boot-starter-web`（Spring MVC），不是 WebFlux。在 Spring MVC 中直接返回 `Flux<ServerSentEvent<T>>` 不会被真正流式输出——Spring 会等待整个 `Flux` 完成后再序列化成一个响应体。当生成耗时较长时，Cloudflare 边缘到 Railway 源站长时间收不到数据，触发 524 超时；前端也看不到逐字输出。
+
+### 改动范围
+- **`AppController`**：
+  - 新增 import：`SseEmitter`、`Disposable`、`StandardCharsets`、`TimeUnit`。
+  - `/chat/gen/code` 与 `/gen/stream/{appId}` 返回类型从 `Flux<ServerSentEvent<...>>` 改为 `SseEmitter`。
+  - 新增私有方法 `subscribeToSseEmitter(Flux<ServerSentEvent<T>>, long, TimeUnit)`：
+    - 创建 `SseEmitter` 并设置 300s 超时。
+    - 订阅 Flux，把每个 `ServerSentEvent` 的 `event/data/id/comment` 实时推送到 emitter。
+    - data 使用 `MediaType.TEXT_PLAIN` 按字符串原样发送（避免额外 JSON 转义）。
+    - Flux 出错时发送 `business-error` 事件并 `completeWithError`。
+    - emitter 完成/超时/错误时取消 Flux 订阅，避免资源泄漏。
+  - 两处 endpoint 获取 `Flux` 后调用 `subscribeToSseEmitter` 返回 emitter。
+- **Cloudflare Functions 代理 `functions/api/[[path]].js`**：检测到响应 `Content-Type` 包含 `text/event-stream` 时，补充 `cache-control: no-cache, no-transform` 和 `x-accel-buffering: no`，进一步防止边缘/浏览器缓冲 SSE 流。
+
+### 进度
+- [x] `AppController` `/chat/gen/code` 改为 `SseEmitter`
+- [x] `AppController` `/gen/stream/{appId}` 改为 `SseEmitter`
+- [x] 新增 `subscribeToSseEmitter` 桥接工具方法
+- [x] Cloudflare Functions 代理补充 SSE 防缓冲头
+- [x] `mvn clean test-compile` 全编译通过
+- [ ] 前后端联调（步骤见下）
+
+### 验证步骤
+1. 后端重新部署后，在应用对话中发送「生成一个简单的跳一跳小游戏」；
+2. 应能在 1~2 秒内看到 AI 消息像打字机一样逐字/逐段出现，而不是长时间空白后一次性出现；
+3. 浏览器 Network 中 `/api/app/chat/gen/code` 请求的 `Type` 为 `eventsource`，`Size` 应随时间递增，不再保持 0 B；
+4. 生成完成后应收到 `done` 事件，右侧预览正常渲染，不再出现 Cloudflare 524；
+5. 对 Vue 项目类型，右侧代码实时展示 `/api/app/gen/stream/{appId}` 也应逐文件/逐 chunk 更新。
+
