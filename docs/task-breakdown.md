@@ -493,3 +493,44 @@ for key 'app_deploy_asset.uk_deploy_path'
 4. 生成完成后应收到 `done` 事件，右侧预览正常渲染，不再出现 Cloudflare 524；
 5. 对 Vue 项目类型，右侧代码实时展示 `/api/app/gen/stream/{appId}` 也应逐文件/逐 chunk 更新。
 
+## M7-10 生产日志 rate limit / 生成中途截断（2026-08-10）
+
+### 背景
+用户反馈：生成到一半断开（如跳一跳小游戏的 `update()` 函数中间停止）；Railway 日志出现 `rate limit of 500 logs/sec reached ... Messages dropped: 14`。
+
+根因组合：
+1. **生产日志量过大**：`application-prod.yml` 中 `langchain4j.open-ai.*.log-requests/responses: true`，流式场景下每个 chunk 都可能打印日志，叠加 MyBatis SQL debug 日志，瞬间超过 Railway 500 logs/sec 限制，关键日志被丢弃。
+2. **模型输出 token 上限不明**：`StreamingChatModelConfig` 未配置 `maxTokens`，使用模型默认值；复杂 HTML/JS 游戏容易在逻辑中间被截断。
+3. **SseEmitter 发送异常处理粗糙**：客户端主动断开（刷新/关闭页面）时 `emitter.send` 抛异常被 `completeWithError`，可能误报错误；且没有 `completed` 标志，存在重复完成风险。
+4. **前端不完整检测太宽松**：只检查 `</html>` 是否存在，模型截断但保留闭合标签时无法提示用户「继续生成」。
+
+### 改动范围
+- **`application-prod.yml`**：
+  - 新增 `logging.level`：root 为 WARN，`com.xiaolou.xiaolouainocodebackend` 为 INFO，MyBatis / Spring JDBC 为 WARN。
+  - `langchain4j.open-ai.*.log-requests/responses` 全部改为 `false`。
+  - `streaming-chat-model` 增加 `max-tokens: 32768`。
+- **`StreamingChatModelConfig`**：新增 `private Integer maxTokens` 并在 builder 中 `.maxTokens(maxTokens)`。
+- **`AppController.subscribeToSseEmitter`**：
+  - 新增 `completed` 原子标志 + `cleanup` 方法，避免重复完成/取消订阅。
+  - `emitter.send` 异常区分 `IOException`（客户端断开，静默清理）与其他异常（`completeWithError`）。
+  - `onError/onTimeout` 日志级别改为 warn/debug，减少噪音。
+- **前端 `AppChatPage.vue` done 事件兜底**：
+  - 从「是否包含 `</html>` 或 ```` ``` ````」改为「是否以 `</html>` 结尾 + Markdown 代码块是否闭合」。
+  - 不完整时 AI 消息内容提示「请发送「继续生成」让 AI 补全剩余部分」，并 `message.warning`。
+
+### 进度
+- [x] 生产环境关闭 langchain4j request/response 日志
+- [x] 生产环境调高 MyBatis/Spring JDBC 日志级别
+- [x] `StreamingChatModelConfig` 支持 `maxTokens` 并配置 32768
+- [x] `AppController` SseEmitter 异常处理优化
+- [x] 前端 done 事件不完整检测增强
+- [x] `mvn clean test-compile` 全编译通过
+- [ ] 前后端联调（步骤见下）
+
+### 验证步骤
+1. Railway 重新部署后，再次生成「跳一跳小游戏」；
+2. Railway 日志不应再出现 `rate limit of 500 logs/sec`；
+3. 生成应能输出完整 HTML/JS（或即使截断也会明确提示「生成内容不完整，请发送继续生成补全」）；
+4. 若仍截断，发送「继续生成」应能补全剩余代码并正常预览；
+5. 刷新页面或关闭标签不会在后端留下 error 级日志。
+

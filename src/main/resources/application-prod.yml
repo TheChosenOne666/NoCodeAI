@@ -35,37 +35,47 @@ spring:
     timeout: 2592000
 
 # AI 模型配置（密钥全部走环境变量，不进仓库）
+# 生产环境日志抑制，避免 Railway 500 logs/sec rate limit 导致关键日志被丢弃
+logging:
+  level:
+    root: WARN
+    com.xiaolou.xiaolouainocodebackend: INFO
+    com.baomidou.mybatisplus: WARN
+    org.apache.ibatis: WARN
+    org.springframework.jdbc: WARN
+
 langchain4j:
   open-ai:
     chat-model:
       base-url: https://ark.cn-beijing.volces.com/api/v3
       api-key: ${VOLC_API_KEY:}
       model-name: ${CHAT_MODEL:doubao-seed-evolving}
-      log-requests: true
-      log-responses: true
+      log-requests: false
+      log-responses: false
       max-retries: 3
     streaming-chat-model:
       base-url: https://ark.cn-beijing.volces.com/api/v3
       api-key: ${VOLC_API_KEY:}
       model-name: ${CHAT_MODEL:doubao-seed-evolving}
-      log-requests: true
-      log-responses: true
+      max-tokens: 32768
+      log-requests: false
+      log-responses: false
       max-retries: 3
     reasoning-streaming-chat-model:
       base-url: https://ark.cn-beijing.volces.com/api/v3
       api-key: ${VOLC_API_KEY:}
       model-name: ${CHAT_MODEL:doubao-seed-evolving}
       temperature: 0.1
-      log-requests: true
-      log-responses: true
+      log-requests: false
+      log-responses: false
       max-retries: 3
     routing-chat-model:
       base-url: https://ark.cn-beijing.volces.com/api/v3
       api-key: ${VOLC_ROUTING_API_KEY:}
       model-name: ${ROUTING_MODEL:doubao-seed-2-0-lite-260428}
       max-tokens: 100
-      log-requests: true
-      log-responses: true
+      log-requests: false
+      log-responses: false
 
 # 对象存储（腾讯云 COS，密钥走环境变量）
 cos:

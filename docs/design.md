@@ -163,6 +163,15 @@ getDeployUrl(deployKey) = `${API_BASE_URL}/static/${deployKey}/`
   - Cloudflare Functions 代理对 `text/event-stream` 响应补充 `cache-control: no-cache, no-transform` 与 `x-accel-buffering: no`，防止边缘/浏览器缓冲。
 - **效果**：前端可实时看到 AI 输出；Cloudflare 因持续收到 chunk 不再 524；长生成场景稳定。
 
+### 9.x.3 生产日志治理与截断提示（2026-08-10）
+- **问题**：生产环境 `langchain4j.open-ai.*.log-requests/responses: true` 导致每个 AI chunk 都打印日志，叠加 MyBatis debug SQL，触发 Railway `500 logs/sec` rate limit，关键日志被丢弃；`StreamingChatModelConfig` 未配置 `maxTokens`，复杂 HTML/JS 易被模型默认上限截断；SseEmitter 对客户端断开处理粗糙；前端截断提示太宽松。
+- **治理**：
+  - `application-prod.yml` 关闭 langchain4j request/response 日志，提升 MyBatis/Spring JDBC 日志级别至 WARN，保留业务 INFO。
+  - `StreamingChatModelConfig` 增加 `maxTokens` 字段，生产配置 `streaming-chat-model.max-tokens: 32768`。
+  - `AppController.subscribeToSseEmitter` 增加 `completed` 标志避免重复完成；`IOException` 静默清理（客户端主动断开）；其他异常才 `completeWithError`。
+  - 前端 `AppChatPage.vue` done 事件检测改为「是否以 `</html>` 结尾 + Markdown 代码块是否闭合」，不完整时提示发送「继续生成」补全。
+- **效果**：日志量受控；模型输出空间充足；截断时用户可明确感知并继续生成。
+
 ### 9. 输入框清空 / 保留策略（2026-08-09）
 - **场景**：应用聊天页发送提示词后，期望"生成成功则清空输入框、生成失败则保留输入以便重试"。
 - **实现**：`sendMessage` 发送时不再立即清空，仅记录 `lastUserInput`；成功路径（`done` 事件 / Vue `preview-ready`）置 `userInput = ''`；

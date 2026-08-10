@@ -35,7 +35,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
 import reactor.core.publisher.Flux;
 
+import java.io.IOException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import java.io.File;
 import java.time.LocalDateTime;
@@ -336,27 +338,31 @@ public class AppController {
     private <T> SseEmitter subscribeToSseEmitter(Flux<ServerSentEvent<T>> flux, long timeout, TimeUnit unit) {
         SseEmitter emitter = new SseEmitter(unit.toMillis(timeout));
         Disposable[] disposable = new Disposable[1];
+        AtomicBoolean completed = new AtomicBoolean(false);
 
-        emitter.onCompletion(() -> {
+        Runnable cleanup = () -> {
             if (disposable[0] != null && !disposable[0].isDisposed()) {
                 disposable[0].dispose();
             }
+        };
+        emitter.onCompletion(() -> {
+            completed.set(true);
+            cleanup.run();
         });
         emitter.onTimeout(() -> {
             log.warn("SseEmitter 已超时");
-            if (disposable[0] != null && !disposable[0].isDisposed()) {
-                disposable[0].dispose();
-            }
+            cleanup.run();
         });
         emitter.onError(t -> {
-            log.error("SseEmitter 发生错误", t);
-            if (disposable[0] != null && !disposable[0].isDisposed()) {
-                disposable[0].dispose();
-            }
+            log.warn("SseEmitter 发生错误: {}", t.getMessage());
+            cleanup.run();
         });
 
         disposable[0] = flux.subscribe(
                 event -> {
+                    if (completed.get()) {
+                        return;
+                    }
                     try {
                         SseEmitter.SseEventBuilder builder = SseEmitter.event();
                         if (event.event() != null) {
@@ -374,13 +380,21 @@ public class AppController {
                             builder.comment(event.comment());
                         }
                         emitter.send(builder);
+                    } catch (IOException e) {
+                        // 客户端断开连接（如刷新/关闭页面）属于正常场景，静默清理即可
+                        log.debug("客户端已断开 SSE 连接，停止推送: {}", e.getMessage());
+                        cleanup.run();
                     } catch (Exception e) {
                         log.error("SseEmitter 发送事件失败", e);
+                        cleanup.run();
                         emitter.completeWithError(e);
                     }
                 },
                 error -> {
                     log.error("SSE Flux 消费异常", error);
+                    if (completed.get()) {
+                        return;
+                    }
                     try {
                         emitter.send(SseEmitter.event().name("business-error")
                                 .data("后端流处理异常: " + error.getMessage(), MediaType.TEXT_PLAIN));
@@ -389,7 +403,11 @@ public class AppController {
                     }
                     emitter.completeWithError(error);
                 },
-                emitter::complete
+                () -> {
+                    if (!completed.get()) {
+                        emitter.complete();
+                    }
+                }
         );
 
         return emitter;

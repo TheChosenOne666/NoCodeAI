@@ -712,11 +712,18 @@ const generateCode = async (userMessage: string, aiMessageIndex: number, request
       setTimeout(async () => {
         await fetchAppInfo()
         await updatePreview()
-        // 兜底检查：生成内容中连代码块或 </html> 都没有，说明输出被截断或保存失败
-        const hasCodeBlock = fullContent.includes('</html>') || fullContent.includes('```')
-        if (!hasCodeBlock) {
-          messages.value[aiMessageIndex].content = '生成内容不完整，未能保存为可预览页面。可能是需求过于复杂导致输出被截断，请尝试简化需求后重试。'
-          message.warning('生成内容不完整，未能保存预览，请尝试简化需求后重试')
+        // 兜底检查：生成内容是否完整闭合。模型可能在函数体中间截断但保留了 </html>，
+        // 因此需同时校验：存在 </html>、且整体以 </html> 结尾（忽略空白）、且 Markdown 代码块已闭合。
+        const trimmed = fullContent.trim()
+        const hasHtmlClose = trimmed.includes('</html>')
+        const endsWithHtmlClose = trimmed.toLowerCase().endsWith('</html>')
+        const openCodeBlocks = (trimmed.match(/```html/gi) || []).length
+        const closeCodeBlocks = (trimmed.match(/```\s*$/gm) || []).length
+        const codeBlockClosed = openCodeBlocks === 0 || closeCodeBlocks >= openCodeBlocks
+        if (!hasHtmlClose || !endsWithHtmlClose || !codeBlockClosed) {
+          messages.value[aiMessageIndex].content =
+            '生成内容不完整，页面可能在代码中间被截断。请发送「继续生成」让 AI 补全剩余部分，或简化需求后重试。'
+          message.warning('生成内容不完整，请发送「继续生成」补全，或简化需求后重试')
         }
       }, 1000)
     })
