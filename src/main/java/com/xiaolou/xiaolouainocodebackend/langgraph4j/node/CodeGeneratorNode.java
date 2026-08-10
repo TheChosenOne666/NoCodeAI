@@ -9,9 +9,11 @@ import com.xiaolou.xiaolouainocodebackend.model.enums.CodeGenTypeEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.bsc.langgraph4j.action.AsyncNodeAction;
 import org.bsc.langgraph4j.prebuilt.MessagesState;
+import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 
 import java.time.Duration;
+import java.util.Objects;
 
 import static org.bsc.langgraph4j.action.AsyncNodeAction.node_async;
 
@@ -31,9 +33,13 @@ public class CodeGeneratorNode {
             // 先使用固定的 appId (后续再整合到业务中)
             Long appId = 0L;
             // 调用流式代码生成（工作流节点没有对应的右侧实时展示 SSE，requestId 传 null）
-            Flux<String> codeStream = codeGeneratorFacade.generateAndSaveCodeStream(userMessage, generationType, appId, null);
-            // 同步等待流式输出完成
-            codeStream.blockLast(Duration.ofMinutes(10)); // 最多等待 10 分钟
+            Flux<ServerSentEvent<String>> sseStream = codeGeneratorFacade.generateAndSaveCodeStream(userMessage, generationType, appId, null);
+            // 工作流节点只需消费 SSE 并等待完成；遇到 business-error 直接失败
+            sseStream.doOnNext(event -> {
+                if ("business-error".equals(event.event())) {
+                    throw new RuntimeException("代码生成失败: " + Objects.requireNonNullElse(event.data(), "未知错误"));
+                }
+            }).blockLast(Duration.ofMinutes(10)); // 最多等待 10 分钟
             // 根据类型设置生成目录
             String generatedCodeDir = String.format("%s/%s_%s", AppConstant.CODE_OUTPUT_ROOT_DIR, generationType.getValue(), appId);
             log.info("AI 代码生成完成，生成目录: {}", generatedCodeDir);

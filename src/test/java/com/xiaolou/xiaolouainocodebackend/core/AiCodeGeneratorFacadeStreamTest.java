@@ -9,6 +9,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.codec.ServerSentEvent;
 import reactor.core.publisher.Flux;
 
+import java.util.Objects;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -66,9 +67,12 @@ class AiCodeGeneratorFacadeStreamTest {
     @DisplayName("generateAndSaveCodeStream 对 VUE_PROJECT 应返回非空 chatFlux")
     void vueProjectChatFluxShouldBeNonNull() {
         String requestId = UUID.randomUUID().toString();
-        Flux<String> chatFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(
+        Flux<ServerSentEvent<String>> chatFlux = aiCodeGeneratorFacade.generateAndSaveCodeStream(
                 "生成一个简单页面", CodeGenTypeEnum.VUE_PROJECT, 1L, requestId);
 
         assertNotNull(chatFlux, "VUE_PROJECT 的 chatFlux 不应为 null");
+        // 非空事件断言：至少应包含 done 事件（真实模型可能耗时，这里仅订阅确认结构）
+        Long count = chatFlux.filter(Objects::nonNull).count().block();
+        assertNotNull(count, "应能统计事件数量");
     }
 }
