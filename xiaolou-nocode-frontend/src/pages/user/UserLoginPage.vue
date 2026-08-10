@@ -82,7 +82,7 @@ import { userLogin } from '@/api/userController.ts'
 import { useLoginUserStore } from '@/stores/loginUser.ts'
 import { useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
-import loginBg from '@/assets/logo.png'
+import loginBg from '@/assets/login-bg.png'
 
 const formState = reactive<API.UserLoginRequest>({
   userAccount: '',

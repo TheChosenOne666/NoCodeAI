@@ -225,3 +225,137 @@ Cloudflare Pages 是纯静态托管，当前端请求相对路径 `/api/static/p
 1. 前端构建部署（Railway / 本地 `npm run build`）后，打开平台首页。
 2. 浏览器 DevTools → Network，确认请求 `https://umengit-cdn.uemc.net/umeng-web.js` 返回 200。
 3. 登录友盟+ 控制台（对应站点 ID），等待几分钟确认有实时访客数据上报。
+
+## M7-3 跨域登录态失效修复（点「查看对话」跳回首页 / 获取应用信息失败，2026-08-10）
+
+### 背景
+生产环境（前端 Cloudflare `xiaolou-nocode.pages.dev`，后端 Railway `nocodeai-production.up.railway.app`）下，用户反馈：点应用「查看对话」后报错「获取应用信息失败」并直接跳回首页，此前一直正常、突然不行。
+
+### 根因
+前端 `VITE_API_BASE_URL` 在生产为 Railway 绝对域名（`https://nocodeai-production.up.railway.app/api`）。所有 API 请求（含 `getAppVoById`、`listAppChatHistory`）跨域发往 Railway 域，且 `request.ts` 设 `withCredentials: true`。
+
+- 登录时 Railway 下发的 `SESSION` cookie 属于 Railway 域。
+- 跨站请求（Cloudflare 页 → Railway 域）浏览器携带 cookie 受 `SameSite`/跨站限制，登录态 cookie 无法随请求到达 Railway → Railway 认为未登录。
+- `listAppChatHistory` 等需登录接口返回 `code:40100`；`request.ts` 响应拦截器在 `code===40100` 时执行 `window.location.href = '/user/login?redirect=...'`，将用户踢回登录页（表现为「跳回首页 / 获取应用信息失败」）。
+- 之前"正常"是因为旧版部分路径/缓存恰好命中，或 cookie 在窗口期内可携带；会话失效 / 重新部署后即稳定复现。
+
+### 需求描述
+让前端 API 请求与页面**同源**（Cloudflare 域），由 Cloudflare Pages Functions 反向代理到 Railway，使登录 cookie 自动同源携带、Railway 能识别登录态，从根上消除跨域 401。
+
+### 修复内容
+1. **新增 `functions/api/[[path]].js`**（Cloudflare Pages Functions catch-all 代理）：将 `/api/*` 同源反向代理到 Railway，原样转发 method / headers（含 `cookie`）/ body / query，并透传响应（含 `set-cookie`）。Functions 运行在服务端，可代理外部域（与 `_redirects` 的 200 rewrite 只能站内重写不同）。
+2. **`.env.production`**：`VITE_API_BASE_URL` 由 `https://nocodeai-production.up.railway.app/api` 改为 `/api`（同源相对路径）。开发环境 `.env.development` 本就是 `/api`（Vite proxy），不受影响。
+3. 既有 `functions/api/static/preview/[[path]].js` 仍保留（更具体路由优先于 catch-all，无冲突）。
+4. 后端无需改动（CORS 已 `allowedOriginPatterns("*")` + `allowCredentials(true)`，会反射请求 Origin）。
+
+### 进度
+- [x] 新增 `functions/api/[[path]].js` 同源反代
+- [x] `.env.production` `VITE_API_BASE_URL=/api`
+- [x] 前端 `pure-build` 确认产物 JS 含 `gu="/api"`、无 Railway 绝对域名
+- [x] 部署到 Cloudflare Pages（`91c79844.xiaolou-nocode.pages.dev`，自定义域已 promote 至同源版本）
+- [x] 验证：同源 `/api/chatHistory` 经 Functions 返回 `200 application/json` 且透传 `set-cookie: SESSION`；Railway 实测接口正常
+- [ ] 浏览器实测（用户用自己账号登录后点「查看对话」应不再跳首页）
+
+### 破坏性变更提示
+- 用户**需重新登录一次**：旧版登录态 cookie 存在 Railway 域，新版改为同源 Cloudflare 域后，浏览器在 Cloudflare 域无旧 cookie，首次进入会「未登录」；重新登录后 Railway 经 Functions 下发的 `set-cookie` 存入 Cloudflare 域，之后即正常。这是一次性迁移代价。
+
+### 联调步骤
+1. 浏览器打开 `https://xiaolou-nocode.pages.dev`，**先退出再重新登录**（清掉旧 Railway 域 cookie 影响）。
+2. 进入「我的作品」→ 点任一应用「查看对话」→ 应正常进入聊天页、加载历史、右侧预览展示，不再报「获取应用信息失败」、不再跳回首页。
+3. DevTools → Network：所有 `/api/...` 请求应发往 `xiaolou-nocode.pages.dev`（同源），不再发往 `railway.app`；`listAppChatHistory` 返回 `code:0`。
+4. 排错：若仍跳登录页，确认浏览器访问的是最新部署（强制刷新 Ctrl+F5 清旧 JS 缓存）；确认登录接口返回 `code:0` 且响应带 `set-cookie`。
+
+## M7-3.1 查看对话崩溃回归修复（codeGenType is not defined，2026-08-10）
+
+### 背景
+M7-3 同源代理部署后，用户点「查看对话」仍报「获取应用信息失败」并跳回首页，且硬刷新、换设备（手机微信）均复现——非缓存问题，是代码回归。
+
+### 根因
+`AppChatPage.vue` 的 `updatePreview` 函数（M7 preview 持久化提交引入）：
+```js
+const deployKey = appInfo.value?.deployKey
+let newPreviewUrl: string
+if (deployKey) {
+  newPreviewUrl = getDeployUrl(deployKey)
+} else {
+  const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML  // ← 块级作用域
+  newPreviewUrl = getStaticPreviewUrl(codeGenType, appId.value)
+}
+previewUrl.value = newPreviewUrl
+previewReady.value = true
+if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {  // ← 分支外用 codeGenType → ReferenceError
+```
+`codeGenType` 用 `const` 声明在 `else` 块内（块级作用域），但后面的 `if (codeGenType === ...)` 在分支外使用。
+当应用**已部署**（有 `deployKey`）走 `if` 分支时，`codeGenType` 未定义，抛 `ReferenceError: codeGenType is not defined`，
+被 `fetchAppInfo` 的 try 捕获 → 弹「获取应用信息失败」+ `router.push('/')` 跳回首页。
+属于「接口正常（code:0）、但前端渲染阶段崩溃」的典型回归，与 M7-3 跨域问题无关。
+
+### 修复内容
+1. `AppChatPage.vue` `updatePreview`：将 `const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML` 提前到函数顶层作用域，使 `if (codeGenType === ...)` 在 `deployKey` 分支下也能正确取值。
+2. 诊断期间临时加的分步 try/catch + `extractErrorDetail` 上屏逻辑已在确认根因后还原为原正常实现。
+
+### 进度
+- [x] `updatePreview` 把 `codeGenType` 提升为函数级变量（消除 ReferenceError）
+- [x] 还原 `fetchAppInfo` 为正常实现（移除诊断代码）
+- [x] 重新构建 + 部署（诊断版 `a1ece581` 验证通过 → 清理版 `26bcd815`）
+
+### 破坏性变更提示
+- 无。纯前端作用域 bug 修复，接口与数据结构未变。
+
+### 联调步骤
+1. 浏览器打开最新部署，登录后进入「我的作品」→ 点任一**已部署**应用「查看对话」→ 应正常进入聊天页、加载历史、右侧预览展示，不再报「获取应用信息失败」、不再跳回首页。
+2. 同时验证**未部署**应用「查看对话」也正常（走 `getStaticPreviewUrl` 分支）。
+
+## M7-4 登录/注册页背景图恢复（2026-08-10）
+
+### 背景
+用户反馈登录/注册页背景图消失，背景变成一张被拉伸的 logo。
+
+### 根因
+原背景大图 `src/assets/login-bg.png` 已在工作区与 git 历史中彻底丢失（`git cat-file` 对象不存在，无法恢复；早前某次「删除不必要文件」误删）。提交 `f704266` 临时用 `logo.png` 顶替 `loginBg` 引用，导致背景是一片被拉伸的 logo，视觉上等于「背景图没了」。
+
+### 修复内容
+1. 用 AI 生成一张风格契合的登录背景大图（淡蓝紫科技感 + 低代码积木元素 + 淡纹理），保存到 `src/assets/login-bg.png`（1536×1024，约 1.08MB）。
+2. `UserLoginPage.vue`（原 `import loginBg from '@/assets/logo.png'`）与 `UserRegisterPage.vue` 的 `loginBg` 引用改回 `@/assets/login-bg.png`。
+3. 两页 `.userLoginBg` 样式本就支持大图（`object-fit: cover`、左右渐变遮罩），无需改动。
+
+### 进度
+- [x] 生成 `src/assets/login-bg.png` 并替换引用
+- [x] 前端 build + 部署（随 M7-3 同源版本一并上线 `91c79844`）
+- [x] 验证部署后 `/assets/login-bg-*.png` 返回 `200 image/png`
+
+### 联调步骤
+1. 浏览器打开 `https://xiaolou-nocode.pages.dev/user/login`，应看到淡蓝紫科技感背景大图 + 左侧登录卡片，而非拉伸的 logo。
+2. 注册页 `/user/register` 同款背景。
+
+## M7-5 生产环境默认模型切换（deepseek-v4-flash-ga-260731 → doubao-seed-evolving，2026-08-10）
+
+### 背景
+用户要求将生产环境的 `deepseek-v4-flash-ga-260731` 模型全部替换为 `doubao-seed-evolving`。
+
+### 改动范围（仅 `application-prod.yml`）
+生产环境三类语言模型（`chat-model` / `streaming-chat-model` / `reasoning-streaming-chat-model`）的 `model-name` 默认值由 `deepseek-v4-flash-ga-260731` 改为 `doubao-seed-evolving`：
+- 三处均通过 `${CHAT_MODEL:doubao-seed-evolving}` 引用，可经环境变量 `CHAT_MODEL` 覆盖；
+- 文件末尾 `CHAT_MODEL` 环境变量默认值同步改为 `doubao-seed-evolving`（部署平台环境变量的兜底默认值）；
+- `routing-chat-model` 维持 `doubao-seed-2-0-lite-260428` 不变（路由分类用小模型，非本次替换对象）。
+
+### 不受影响项（确认过不改动）
+- `application-local.yml`：本地开发默认仍保留 `deepseek-v4-flash-ga-260731`（用户仅要求改生产环境）。
+- 数据库：经核查 `sql/*.sql` 与代码，模型名不落库，全部来自配置文件/环境变量，无持久化模型配置需同步修改。
+- 前端：`.env.production` 仅含 API 地址与部署域名，无模型名硬编码。
+
+### 进度
+- [x] `application-prod.yml` 三处 `model-name` 默认值改为 `doubao-seed-evolving`
+- [x] `application-prod.yml` 末尾 `CHAT_MODEL` 默认值改为 `doubao-seed-evolving`
+- [x] 确认无数据库/前端残留 `deepseek-v4-flash-ga-260731`（生产路径已清空）
+- [x] 文档同步（design.md §5 模型配置章节 + 本节）
+
+### 破坏性变更提示
+- 生产环境默认语言模型切换为 `doubao-seed-evolving`。若部署平台环境变量 `CHAT_MODEL` 已显式设置旧值，需同步改为 `doubao-seed-evolving`（或直接删除该环境变量改用文件默认值）。
+- 若 `doubao-seed-evolving` 在火山引擎方舟的 endpoint 未开通，会返回 `InvalidEndpointOrModel.NotFound`，首次请求即报错，上线前需确认 endpoint 可用。
+
+### 验证步骤
+1. 重新构建后端部署到 Railway，或直接改 Railway 环境变量 `CHAT_MODEL=doubao-seed-evolving`（若平台已设）。
+2. 触发一次问答/代码生成，观察后端日志 `modelName=doubao-seed-evolving`（或在 ark 控制台确认调用模型）。
+3. 验证生成质量符合预期（doubao-seed-evolving 为对话/代码通用模型，替代 deepseek-v4-flash 应无缝）。
+

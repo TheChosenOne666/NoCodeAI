@@ -174,7 +174,8 @@ const fetchAppInfo = async () => {
 
   loading.value = true
   try {
-    const res = await getAppVoById({ id: id as unknown as number })
+    // 保持 id 为字符串传参，避免 JS number 精度丢失（与 AppChatPage 一致）
+    const res = await getAppVoById({ id: id as any })
     if (res.data.code === 0 && res.data.data) {
       appInfo.value = res.data.data
 

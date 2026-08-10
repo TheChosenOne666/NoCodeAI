@@ -19,7 +19,8 @@
 - 前端：`business-error` 事件展示具体 message；`EventSource.onerror` 触发时视为连接异常，直接显示"生成失败，请重试"，不将 CONNECTING 状态误判为正常关闭。
 
 ### 5. 模型配置
-- 本地开发默认模型通过 `application-local.yml` 的 `spring.ai.openai.model-name` 指定，当前默认值为 `deepseek-v4-flash-ga-260731`，支持 `CHAT_MODEL` 环境变量覆盖。
+- 本地开发默认模型通过 `application-local.yml` 的 `langchain4j.open-ai.*.model-name` 指定，默认值为 `${CHAT_MODEL:deepseek-v4-flash-ga-260731}`，支持 `CHAT_MODEL` 环境变量覆盖。
+- 生产环境默认模型（`application-prod.yml`）统一为 `doubao-seed-evolving`（chat / streaming / reasoning-streaming 三类模型均用 `CHAT_MODEL` 默认覆盖；routing 用 `doubao-seed-2-0-lite-260428`）。
 - 若模型 ID 失效，火山引擎会返回 `InvalidEndpointOrModel.NotFound`，前端表现为"系统错误"。
 
 ## 精品案例作品持久化（MySQL）
@@ -108,8 +109,25 @@ getDeployUrl(deployKey) = `${API_BASE_URL}/static/${deployKey}/`
 - **Cloudflare Pages rewrite 修正（2026-08-10 补充）**：未部署预览路径改为 `/api/static/preview_{appId}/` 后，
   原规则 `/api/static/preview/*` 因 `preview` 后紧跟下划线而非斜杠，无法匹配新路径，导致请求仍被 Pages 自身处理而 404/200 fallback。
   修复：规则放宽为 `/api/static/*`，代理全部 `/api/static/` 子路径到 Railway 后端，同时覆盖部署访问 `/api/static/{deployKey}/`。
-- **前端访问优先级（`AppChatPage.vue` `updatePreview`）**：已部署（`appInfo.deployKey` 存在）→ `getDeployUrl(deployKey)`；
+- **前端访问优先级（`AppChatPage.vue` `updatePreview`）**：`codeGenType` 在函数顶层统一取值（`appInfo.codeGenType || HTML`）。
+  已部署（`appInfo.deployKey` 存在）→ `getDeployUrl(deployKey)`；
   未部署 → `getStaticPreviewUrl(codeGenType, appId)`（即 `/api/static/preview_{appId}/`）。两种情况均查库，持久化有效。
+  注：`codeGenType` 若声明在 `else` 块内会因块级作用域导致已部署分支 `ReferenceError`（M7-3.1 修复），故必须置于函数级作用域。
+
+### 8.x 前端 API 同源代理（消除跨域登录态失效，2026-08-10）
+
+- **问题**：生产前端托管在 Cloudflare（`xiaolou-nocode.pages.dev`），后端在 Railway（`nocodeai-production.up.railway.app`）。
+  早期前端 `VITE_API_BASE_URL` 设为 Railway 绝对域名，所有 API 跨域请求。登录态 `SESSION` cookie 属于 Railway 域，
+  跨站（Cloudflare 页 → Railway 域）请求受 `SameSite`/跨站限制，**登录 cookie 无法随请求到达 Railway** → 需登录接口返回 401 →
+  前端拦截器强制跳登录页，表现为「点查看对话跳回首页 / 获取应用信息失败」。
+- **方案**：前端 API 改为**同源相对路径** `/api`（Cloudflare 域），由 **Cloudflare Pages Functions**（`functions/api/[[path]].js`）
+  反向代理到 Railway。浏览器同源请求自动携带 Cloudflare 域 cookie；Functions 在服务端把请求（含 `cookie` 头）原样转发 Railway，
+  并把 Railway 的 `set-cookie` 透传回浏览器，登录态得以保持。
+- **为何用 Functions 而非 `_redirects`**：Cloudflare Pages `_redirects` 的 `200` rewrite 只能站内路径重写，**无法代理到外部域**；
+  Pages Functions（运行时 `fetch` 外部域）可代理，已用于 `/api/*` 全量 catch-all（预览专用代理 `functions/api/static/preview/[[path]].js` 仍保留，更具体路由优先）。
+- **配置**：`.env.production` 的 `VITE_API_BASE_URL=/api`；开发 `.env.development` 本就 `/api`（Vite proxy），不受影响。
+- **迁移代价**：旧版登录 cookie 在 Railway 域，新版同源后用户需**重新登录一次**（Cloudflare 域初始无旧 cookie），之后正常。
+- **CORS**：后端 `allowedOriginPatterns("*")` + `allowCredentials(true)`，会反射请求 Origin，同源/跨域均兼容。
 
 ### 9. 输入框清空 / 保留策略（2026-08-09）
 - **场景**：应用聊天页发送提示词后，期望"生成成功则清空输入框、生成失败则保留输入以便重试"。

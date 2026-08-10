@@ -480,14 +480,14 @@ const fetchAppInfo = async () => {
   appId.value = id
 
   try {
-    const res = await getAppVoById({ id: id as unknown as number })
+    // 保持 id 为字符串传参，避免 JS number 精度丢失（19位雪花ID超出 MAX_SAFE_INTEGER）。
+    // 与 loadChatHistory 一致：Spring 后端 @RequestParam long 可从字符串精确解析。
+    const res = await getAppVoById({ id: id as any })
     if (res.data.code === 0 && res.data.data) {
       appInfo.value = res.data.data
-      console.log('应用信息:', appInfo.value)
 
       // 先加载对话历史
       await loadChatHistory()
-      console.log('加载对话历史后，消息数量:', messages.value.length)
 
       // 加载已生成的文件树（如果有）
       await loadProjectFiles()
@@ -495,26 +495,24 @@ const fetchAppInfo = async () => {
       // 如果有对话记录，直接展示对应的网站
       if (messages.value.length > 0) {
         await updatePreview()
-        console.log('已更新预览URL:', previewUrl.value)
       } else if (appInfo.value.deployKey) {
         // 如果没有对话历史但应用已部署过，也显示预览
         await updatePreview()
-        console.log('应用已部署，已更新预览URL:', previewUrl.value)
       } else {
         // 检查是否有初始提示词（从路由参数获取）
         const initialPrompt = route.query.initialPrompt as string
         if (initialPrompt && isOwner.value) {
-          console.log('检测到初始提示词，自动发送:', initialPrompt)
           await sendInitialMessage(initialPrompt)
         }
       }
     } else {
-      message.error('获取应用信息失败')
+      console.error('获取应用信息失败，后端返回:', res.data)
+      message.error(`获取应用信息失败：${res.data.message || res.data.code}`)
       router.push('/')
     }
   } catch (error) {
     console.error('获取应用信息失败：', error)
-    message.error('获取应用信息失败')
+    message.error('获取应用信息失败（网络或解析异常）')
     router.push('/')
   }
 }
@@ -886,11 +884,11 @@ const updatePreview = async () => {
     return
   }
   const deployKey = appInfo.value?.deployKey
+  const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
   let newPreviewUrl: string
   if (deployKey) {
     newPreviewUrl = getDeployUrl(deployKey)
   } else {
-    const codeGenType = appInfo.value?.codeGenType || CodeGenTypeEnum.HTML
     newPreviewUrl = getStaticPreviewUrl(codeGenType, appId.value)
   }
   previewUrl.value = newPreviewUrl
