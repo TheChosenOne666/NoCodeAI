@@ -150,6 +150,10 @@ getDeployUrl(deployKey) = `${API_BASE_URL}/static/${deployKey}/`
   - **前端兜底**：`AppChatPage.vue` `done` 事件后若 `fullContent` 不含 `</html>` 或 ```` ``` ````` 则提示「生成内容不完整，请重新生成」；`updatePreview` 对 HTML/VUE 统一 HEAD 校验预览文件存在，否则 `message.warning`。
 - **效果**：截断可挽救、保存失败前端可见、完成话术明确、预览必现且可校验，多轮续写稳定不超时。
 
+### 9.x.1 预览资源 upsert（2026-08-10）
+- **问题**：`app_deploy_asset` 唯一键 `uk_deploy_path(deploy_key, file_path)`；原保存逻辑「先按 `deploy_key` 删再批量 `insert`」在重复生成同应用（流式完成异步上下文/竞态）时撞唯一键报 `Duplicate entry`。
+- **治理**：`AppDeployAssetMapper` 新增 `upsertBatch`（@Insert + `ON DUPLICATE KEY UPDATE`，命中唯一键则更新 `content_type/file_size/content/is_delete/update_time`，否则插入）；`AppServiceImpl.savePreviewAssets` / `saveDeployAssets` 统一改为 `upsertBatch`，移除先删后插，天然支持重复生成覆盖更新且消除竞态冲突。
+
 ### 9. 输入框清空 / 保留策略（2026-08-09）
 - **场景**：应用聊天页发送提示词后，期望"生成成功则清空输入框、生成失败则保留输入以便重试"。
 - **实现**：`sendMessage` 发送时不再立即清空，仅记录 `lastUserInput`；成功路径（`done` 事件 / Vue `preview-ready`）置 `userInput = ''`；

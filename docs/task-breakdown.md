@@ -433,3 +433,28 @@ if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {  // ← 分支外用 codeGenT
 4. 若故意构造解析失败，前端应弹出 `business-error` 提示而非静默空白；
 5. 多轮「继续生成」稳定不报「AI生成错误」，且每次都落库可预览。
 
+## M7-8 预览资源 upsert 修复重复生成唯一键冲突（2026-08-10）
+
+### 背景
+用户连续对同一应用重新生成（如「生成一个简单的可玩的跳一跳小游戏」多次）时，保存阶段抛出：
+```
+java.sql.SQLIntegrityConstraintViolationException: Duplicate entry 'preview_2086705705764442113-index.html'
+for key 'app_deploy_asset.uk_deploy_path'
+```
+表 `app_deploy_asset` 唯一键为 `uk_deploy_path(deploy_key, file_path)`。`savePreviewAssets` / `saveDeployAssets` 原逻辑是「先按 `deploy_key` 删除全部旧记录，再批量 `insert`」。在流式生成完成的 `Mono.fromRunnable` 异步上下文或重复触发生成时，删除与插入之间存在竞态/时序问题，导致同 `(deploy_key, file_path)` 已存在记录，新 `insert` 直接撞唯一键。
+
+### 改动范围
+- **`AppDeployAssetMapper`**：新增 `upsertBatch(@Param("list") List<AppDeployAsset>)` 注解方法，使用 `INSERT ... ON DUPLICATE KEY UPDATE`（按 `uk_deploy_path` 命中则更新 `content_type/file_size/content/is_delete/update_time`，否则插入）。import 补充 `java.util.List`、`org.apache.ibatis.annotations.Insert`。
+- **`AppServiceImpl`**：`savePreviewAssets` 与 `saveDeployAssets` 均移除「先 `delete` 再循环 `insert`」，改为调用 `appDeployAssetMapper.upsertBatch(assets)`。彻底消除竞态导致的 Duplicate entry，且天然支持重复生成同应用的覆盖更新。
+
+### 进度
+- [x] `AppDeployAssetMapper.upsertBatch`（@Insert + ON DUPLICATE KEY UPDATE）
+- [x] `AppServiceImpl` 两处保存逻辑改用 upsert（移除先删后插）
+- [x] `mvn clean test-compile` 全编译通过
+- [ ] 前后端联调（步骤见下）
+
+### 验证步骤
+1. Railway 重新部署后，对同一应用连续两次生成不同需求（如先「跳一跳小游戏」、再「贪吃蛇小游戏」）；
+2. 第二次生成应正常落库并在右侧预览更新，不再报 `Duplicate entry`；
+3. 查询 `app_deploy_asset` 中 `deploy_key = preview_{appId}` 的记录数应等于本次生成文件数（旧文件被覆盖而非叠加，无重复 `file_path`）。
+

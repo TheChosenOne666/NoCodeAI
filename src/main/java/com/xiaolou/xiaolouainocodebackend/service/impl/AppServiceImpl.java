@@ -304,13 +304,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
         List<AppDeployAsset> assets = new ArrayList<>();
         collectDeployAssets(deployKey, sourceDir, sourceDir, assets);
         ThrowUtils.throwIf(assets.isEmpty(), ErrorCode.SYSTEM_ERROR, "部署内容为空，未找到可部署文件");
-        // 先清理同 deployKey 的旧资源（重复部署场景），再批量写入
-        QueryWrapper<AppDeployAsset> deleteWrapper = new QueryWrapper<>();
-        deleteWrapper.eq("deploy_key", deployKey);
-        appDeployAssetMapper.delete(deleteWrapper);
-        for (AppDeployAsset asset : assets) {
-            appDeployAssetMapper.insert(asset);
-        }
+        // 批量 upsert：依赖唯一键 uk_deploy_path(deploy_key, file_path) 实现存在即更新、不存在即插入，
+        // 避免重复部署场景下的 Duplicate entry 异常
+        appDeployAssetMapper.upsertBatch(assets);
         log.info("部署资源已写入数据库，deployKey={}，文件数={}", deployKey, assets.size());
     }
 
@@ -331,12 +327,9 @@ public class AppServiceImpl extends ServiceImpl<AppMapper, App>
             log.warn("预览资源为空，跳过写入，appId={}", appId);
             return;
         }
-        QueryWrapper<AppDeployAsset> deleteWrapper = new QueryWrapper<>();
-        deleteWrapper.eq("deploy_key", deployKey);
-        appDeployAssetMapper.delete(deleteWrapper);
-        for (AppDeployAsset asset : assets) {
-            appDeployAssetMapper.insert(asset);
-        }
+        // 批量 upsert：依赖唯一键 uk_deploy_path(deploy_key, file_path) 实现存在即更新、不存在即插入，
+        // 避免重复生成同一应用时先删后插竞态导致的 Duplicate entry 异常
+        appDeployAssetMapper.upsertBatch(assets);
         log.info("预览资源已持久化到数据库，deployKey={}，文件数={}", deployKey, assets.size());
     }
 
