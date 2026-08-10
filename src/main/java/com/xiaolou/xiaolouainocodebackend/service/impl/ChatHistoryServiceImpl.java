@@ -147,6 +147,48 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
         return this.page(Page.of(1, pageSize), queryWrapper);
     }
 
+    /**
+     * AI 历史消息回传给模型时的最大保留长度。
+     * 完整生成的 HTML 可能长达数十 KB，若原样回传会导致上下文雪球式膨胀、
+     * 单轮生成超过流式超时（120s）而失败。这里只保留摘要，并明确告知模型
+     * 完整代码已保存，本轮应基于用户新需求重新输出完整 HTML。
+     */
+    private static final int AI_HISTORY_SUMMARY_MAX_LEN = 800;
+
+    /**
+     * 将完整 AI 消息压缩为回传模型的摘要。
+     * 保留前 {@link #AI_HISTORY_SUMMARY_MAX_LEN} 个字符以便模型感知上轮产物形态，
+     * 并追加指令要求其重新生成完整 HTML（而非基于截断片段续写）。
+     *
+     * @param fullAiMessage 完整 AI 历史消息
+     * @return 精简后的摘要消息
+     */
+    String summarizeAiMessage(String fullAiMessage) {
+        if (StrUtil.isBlank(fullAiMessage)) {
+            return fullAiMessage;
+        }
+        String summary = fullAiMessage.length() > AI_HISTORY_SUMMARY_MAX_LEN
+                ? fullAiMessage.substring(0, AI_HISTORY_SUMMARY_MAX_LEN) + "...(已截断)"
+                : fullAiMessage;
+        return "[上一轮已生成完整的 " + codeGenTypeOf(fullAiMessage)
+                + " 并保存为 index.html，内容为上述片段摘要，非完整代码]\n"
+                + summary + "\n"
+                + "[指令：请基于用户本轮的新需求，重新输出【完整】的 HTML 代码（含全部结构与脚本），不要续写或依赖被截断的内容]";
+    }
+
+    /**
+     * 根据消息内容粗略判断其代码类型，仅用于历史摘要的可读性说明。
+     */
+    String codeGenTypeOf(String message) {
+        if (StrUtil.isBlank(message)) {
+            return "代码";
+        }
+        if (message.contains("<!DOCTYPE html") || message.contains("<html")) {
+            return "HTML 页面";
+        }
+        return "代码";
+    }
+
     @Override
     public int loadChatHistoryToMemory(Long appId, MessageWindowChatMemory chatMemory, int maxCount) {
         try {
@@ -168,14 +210,16 @@ public class ChatHistoryServiceImpl extends ServiceImpl<ChatHistoryMapper, ChatH
             chatMemory.clear();
             for (ChatHistory history : historyList) {
                 if (ChatHistoryMessageTypeEnum.USER.getValue().equals(history.getMessageType())) {
+                    // 用户指令必须原样保留，否则模型无法感知要修改的需求
                     chatMemory.add(UserMessage.from(history.getMessage()));
                     loadedCount++;
                 } else if (ChatHistoryMessageTypeEnum.AI.getValue().equals(history.getMessageType())) {
-                    chatMemory.add(AiMessage.from(history.getMessage()));
+                    // AI 历史消息精简后回传，避免完整 HTML 造成上下文膨胀与超时
+                    chatMemory.add(AiMessage.from(summarizeAiMessage(history.getMessage())));
                     loadedCount++;
                 }
             }
-            log.info("成功为 appId: {} 加载了 {} 条历史对话", appId, loadedCount);
+            log.info("成功为 appId: {} 加载了 {} 条历史对话（AI 消息已摘要压缩）", appId, loadedCount);
             return loadedCount;
         } catch (Exception e) {
             log.error("加载历史对话失败，appId: {}, error: {}", appId, e.getMessage(), e);

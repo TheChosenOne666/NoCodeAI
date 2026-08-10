@@ -106,6 +106,16 @@ getDeployUrl(deployKey) = `${API_BASE_URL}/static/${deployKey}/`
   而 Pages 上不存在该目录，会 fallback 返回前端 `index.html`，导致预览显示平台首页。
   修复：在 `public/_redirects` 添加 `200` rewrite 规则，把 `/api/static/preview/*` 代理到 Railway 后端
   `https://nocodeai-production.up.railway.app/api/static/preview/:splat`。状态码 `200` 为透明代理，用户/iframe 无感知，仍保持同源，编辑模式继续可用。
+
+### 9. AI 历史消息回传裁剪（防上下文膨胀导致生成超时，2026-08-10）
+
+- **问题**：多轮「继续/修改」对话中，`ChatHistoryServiceImpl.loadChatHistoryToMemory` 把 `chat_history` 表里 **AI 的完整响应（含完整 HTML/JS，常达十几 KB）** 原样加载进 `MessageWindowChatMemory` 回传给大模型。每轮续写都把上一轮完整产物叠加进上下文，雪球式膨胀，单轮生成远超 `StreamingChatModelConfig` 的 120s 流式超时，流被中断→前端报「AI生成错误」；且超时使 `doOnComplete` 的 `savePreviewAssets` 不触发，预览库无记录。
+- **治理**：在「回传模型」环节对 AI 历史消息做摘要压缩（`summarizeAiMessage`，阈值 `AI_HISTORY_SUMMARY_MAX_LEN = 800`）：
+  - 保留前 800 字符摘要（供模型感知上轮产物形态）+ 固定指令「上一轮已生成完整 HTML 并保存为 index.html，请基于用户新需求重新输出【完整】HTML 代码，不要续写或依赖被截断内容」；
+  - **用户历史消息原样保留**（指令很短，且必须完整模型才知道改什么）；
+  - `chat_history` 表存储内容不变（仍存完整，便于审计/回放），仅加载入 memory 时裁剪；
+  - `MessageWindowChatMemory` 每轮 `createAiCodeGeneratorService` 会 `clear()` 并以 DB 重建，Redis memory 中上轮完整 AI 消息下一轮被丢弃，不影响。
+- **效果**：上下文长度与轮数解耦，多轮续写不再爆炸，单轮生成稳定控制在超时内。若续写仍偶发超时，配合把流式超时 120s 提到 300s 作缓冲（方案 2，未启用）。
 - **Cloudflare Pages rewrite 修正（2026-08-10 补充）**：未部署预览路径改为 `/api/static/preview_{appId}/` 后，
   原规则 `/api/static/preview/*` 因 `preview` 后紧跟下划线而非斜杠，无法匹配新路径，导致请求仍被 Pages 自身处理而 404/200 fallback。
   修复：规则放宽为 `/api/static/*`，代理全部 `/api/static/` 子路径到 Railway 后端，同时覆盖部署访问 `/api/static/{deployKey}/`。

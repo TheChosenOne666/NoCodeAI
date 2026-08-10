@@ -356,6 +356,36 @@ if (codeGenType === CodeGenTypeEnum.VUE_PROJECT) {  // ← 分支外用 codeGenT
 
 ### 验证步骤
 1. 重新构建后端部署到 Railway，或直接改 Railway 环境变量 `CHAT_MODEL=doubao-seed-evolving`（若平台已设）。
+
+## M7-6 AI 多轮续写生成超时修复（完整 HTML 回传导致上下文膨胀，2026-08-10）
+
+### 背景
+用户在对话中让 AI「去掉左边说明面板，让游戏占满屏幕」「继续」等续写指令时，前端长时间转圈后报「AI生成错误」。
+排查日志发现：`/api/static/preview_{appId}/index.html` 查询 `app_deploy_asset` 返回 `Total: 0`（未生成成功），且发给 AI 的请求体里 assistant 历史消息携带了**上一轮完整游戏 HTML**（含数千行 JS，十几 KB）。
+根因：每次「继续/修改」都把上一轮完整 HTML 原样回传给大模型，历史上下文雪球式膨胀，单轮生成远超流式模型 120s 超时（`StreamingChatModelConfig` 第 40 行），流被中断→前端 `EventSource.onerror`→报「AI生成错误」；且超时中断使 `doOnComplete` 的 `savePreviewAssets` 不触发，预览库无记录。
+
+### 改动范围（仅 `ChatHistoryServiceImpl.loadChatHistoryToMemory`）
+- 加载历史到 `MessageWindowChatMemory` 时，对 **AI 历史消息做摘要压缩**（`summarizeAiMessage`）：保留前 800 字符摘要 + 追加指令「请基于用户新需求重新输出【完整】HTML 代码，不要续写或依赖被截断内容」；
+- **用户历史消息原样保留**（用户指令很短，且必须完整才能让模型知道要改什么）；
+- 摘要方法 `summarizeAiMessage` / `codeGenTypeOf` 改为包级可见便于单测；
+- 不改变 `chat_history` 表的存储内容（仍存完整 HTML，便于审计/回放），仅在「回传模型」环节裁剪。
+
+### 不受影响项（确认过不改动）
+- 流式超时 `StreamingChatModelConfig` 的 120s 本次未调整（先做根因治理；若续写仍偶发超时，再配合方案 2 提到 300s 作缓冲）；
+- 不改动前端、不改动 `app_deploy_asset` 持久化逻辑；
+- `MessageWindowChatMemory` 每轮 `createAiCodeGeneratorService` 会 `clear()` 并以 DB 重建，故 Redis memory 里上轮完整 AI 消息下一轮被丢弃，不影响。
+
+### 进度
+- [x] `ChatHistoryServiceImpl` AI 历史消息摘要压缩（超长截断+重生成指令，用户消息原样）
+- [x] 单元测试 `ChatHistoryServiceImplTest`（4 例全过：超长截断、短消息保留、空值、HTML 类型识别）
+- [x] `mvn clean test` 通过；`mvn compile` 全项目编译通过
+- [x] 文档同步（本节 + design.md §8 补充）
+
+### 验证步骤
+1. 后端重新部署后，进入任一应用对话，发「继续生成/去掉说明面板」等多轮续写指令；
+2. 应能在 120s 内收到 `done` 并右侧预览更新，不再报「AI生成错误」；
+3. Railway 日志确认 `app_deploy_asset` 查询返回 `Total: 1`（生成成功并落库）。
+
 2. 触发一次问答/代码生成，观察后端日志 `modelName=doubao-seed-evolving`（或在 ark 控制台确认调用模型）。
 3. 验证生成质量符合预期（doubao-seed-evolving 为对话/代码通用模型，替代 deepseek-v4-flash 应无缝）。
 
